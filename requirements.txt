@@ -1,0 +1,28 @@
+# Essential web scraping and API clients
+requests==2.31.0
+beautifulsoup4==4.12.2
+praw==7.7.1  # Reddit API
+google-api-python-client==2.110.0  # YouTube Data API
+
+# Database (SQLite - no external dependencies needed)
+sqlalchemy==2.0.23
+
+# Data processing and NLP
+pandas>=2.2.0
+numpy>=1.26.0
+nltk==3.8.1
+textblob==0.17.1
+vaderSentiment==3.3.2
+scikit-learn>=1.4.0
+
+# Web framework
+flask==3.0.0
+flask-cors==4.0.0
+flask-sqlalchemy==3.1.1
+
+# Environment and configuration
+python-dotenv==1.0.0
+
+# Logging
+loguru==0.7.2
+

@@ -440,7 +440,47 @@ if themes_data and len(themes_data) > 0:
         # Display chart
         st.plotly_chart(fig, use_container_width=True, key="themes_chart")
         
-        # Interactive theme and sentiment selection
+        # Create clickable buttons for each theme-sentiment combination (like Flask app)
+        st.markdown("---")
+        st.subheader("🎯 Click Theme + Sentiment to Filter Posts (Like Flask App)")
+        
+        # Create interactive buttons for each theme and sentiment
+        for i, theme in enumerate(themes_data[:5]):  # Show top 5 themes for space
+            st.markdown(f"**{theme['name']}** (Total: {theme['total_mentions']})")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                if theme['positive_count'] > 0:
+                    if st.button(f"🟢 Positive ({theme['positive_count']})", key=f"pos_{i}_{theme['name']}"):
+                        st.session_state.selected_theme = theme['name']
+                        st.session_state.selected_sentiment = "positive"
+                        st.rerun()
+            
+            with col2:
+                if theme['negative_count'] > 0:
+                    if st.button(f"🔴 Negative ({theme['negative_count']})", key=f"neg_{i}_{theme['name']}"):
+                        st.session_state.selected_theme = theme['name']
+                        st.session_state.selected_sentiment = "negative"
+                        st.rerun()
+            
+            with col3:
+                if theme['neutral_count'] > 0:
+                    if st.button(f"⚪ Neutral ({theme['neutral_count']})", key=f"neu_{i}_{theme['name']}"):
+                        st.session_state.selected_theme = theme['name']
+                        st.session_state.selected_sentiment = "neutral"
+                        st.rerun()
+            
+            with col4:
+                if st.button(f"📊 All ({theme['total_mentions']})", key=f"all_{i}_{theme['name']}"):
+                    st.session_state.selected_theme = theme['name']
+                    st.session_state.selected_sentiment = None
+                    st.rerun()
+        
+        # Manual selection dropdowns
+        st.markdown("---")
+        st.subheader("🔧 Manual Selection")
+        
         col1, col2, col3 = st.columns(3)
         with col1:
             selected_theme = st.selectbox(
@@ -457,14 +497,27 @@ if themes_data and len(themes_data) > 0:
             )
         
         with col3:
-            if st.button("🔄 Reset Filters", key="reset_filters"):
+            if st.button("🔄 Reset All Filters", key="reset_filters"):
                 st.session_state.selected_theme = None
                 st.session_state.selected_sentiment = None
                 st.rerun()
         
-        # Use session state values if they exist, otherwise use dropdown values
-        active_theme = st.session_state.selected_theme if st.session_state.selected_theme else (selected_theme if selected_theme != "All Themes" else None)
-        active_sentiment = st.session_state.selected_sentiment if st.session_state.selected_sentiment else (selected_sentiment_dropdown if selected_sentiment_dropdown != "All" else None)
+        # Update session state from dropdowns if no button was clicked
+        if selected_theme != "All Themes" and not st.session_state.get('selected_theme'):
+            st.session_state.selected_theme = selected_theme
+        if selected_sentiment_dropdown != "All" and not st.session_state.get('selected_sentiment'):
+            st.session_state.selected_sentiment = selected_sentiment_dropdown
+        
+        # Use session state values for active filtering
+        active_theme = st.session_state.get('selected_theme')
+        active_sentiment = st.session_state.get('selected_sentiment')
+        
+        # Show current selection
+        if active_theme or active_sentiment:
+            filter_display = []
+            if active_theme: filter_display.append(f"**Theme:** {active_theme}")
+            if active_sentiment: filter_display.append(f"**Sentiment:** {active_sentiment.title()}")
+            st.info(f"🎯 **Active Filters:** {' | '.join(filter_display)}")
         
         # Show filtered posts based on theme and sentiment
         if active_theme or active_sentiment:

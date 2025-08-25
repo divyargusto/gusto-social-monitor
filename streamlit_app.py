@@ -62,7 +62,7 @@ if 'selected_theme' not in st.session_state:
 if 'selected_sentiment' not in st.session_state:
     st.session_state.selected_sentiment = None
 
-# Database connection
+# Database connection with better error handling
 @st.cache_resource
 def get_db_connection():
     db_paths = ['gusto_monitor.db', 'backend/gusto_monitor.db', './gusto_monitor.db']
@@ -72,9 +72,13 @@ def get_db_connection():
                 conn = sqlite3.connect(db_path, check_same_thread=False)
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM social_media_posts LIMIT 1")
+                st.success(f"✅ Connected to database: {db_path}")
                 return conn
-            except:
+            except Exception as e:
+                st.warning(f"⚠️ Database error for {db_path}: {e}")
                 continue
+    
+    st.error("❌ No database found! App will show empty data.")
     return sqlite3.connect(':memory:', check_same_thread=False)
 
 conn = get_db_connection()
@@ -99,7 +103,7 @@ end_date_str = end_date.strftime('%Y-%m-%d')
 platform_filter = st.sidebar.selectbox("Platform", ["All", "reddit"], index=0)
 sentiment_filter = st.sidebar.selectbox("Sentiment", ["All", "positive", "negative", "neutral"], index=0)
 
-# Data functions
+# Data functions with improved error handling
 @st.cache_data(ttl=300)
 def load_overview_data(start_date, end_date):
     try:
@@ -109,8 +113,12 @@ def load_overview_data(start_date, end_date):
             where_conditions.append(f"DATE(created_at) BETWEEN '{start_date}' AND '{end_date}'")
         where_clause = " AND ".join(where_conditions)
         
+        # Test the query first
         cursor.execute(f"SELECT COUNT(*) FROM social_media_posts WHERE {where_clause}")
         total_posts = cursor.fetchone()[0] or 0
+        
+        if total_posts == 0:
+            st.warning("⚠️ No posts found in database for the selected date range")
         
         cursor.execute(f"SELECT sentiment_label, COUNT(*) FROM social_media_posts WHERE {where_clause} AND sentiment_label IS NOT NULL GROUP BY sentiment_label")
         sentiment_data = cursor.fetchall()
@@ -132,7 +140,7 @@ def load_overview_data(start_date, end_date):
             'recent_posts_7_days': recent_posts
         }
     except Exception as e:
-        st.error(f"Database error: {e}")
+        st.error(f"❌ Database error in overview: {e}")
         return {'total_posts': 0, 'sentiment_breakdown': {'positive': 0, 'negative': 0, 'neutral': 0}, 'avg_sentiment_score': 0, 'recent_posts_7_days': 0}
 
 @st.cache_data(ttl=300)
@@ -159,9 +167,13 @@ def load_sentiment_trends(start_date, end_date):
                 'date': row[0], 'avg_sentiment': round(row[1] or 0, 3), 'post_count': row[2],
                 'positive_count': row[3], 'negative_count': row[4], 'neutral_count': row[5]
             })
+        
+        if not trends_data:
+            st.warning("⚠️ No trends data available for selected date range")
+        
         return trends_data
     except Exception as e:
-        st.error(f"Error loading sentiment trends: {e}")
+        st.error(f"❌ Error loading sentiment trends: {e}")
         return []
 
 @st.cache_data(ttl=300)
@@ -197,9 +209,13 @@ def load_themes_data(start_date, end_date):
                 'negative_count': row[5],
                 'neutral_count': row[6]
             })
+        
+        if not themes:
+            st.warning("⚠️ No themes data available for selected date range")
+        
         return themes
     except Exception as e:
-        st.error(f"Error loading themes data: {e}")
+        st.error(f"❌ Error loading themes data: {e}")
         return []
 
 @st.cache_data(ttl=300)
@@ -229,7 +245,7 @@ def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
             })
         return posts_data
     except Exception as e:
-        st.error(f"Error loading posts data: {e}")
+        st.error(f"❌ Error loading posts data: {e}")
         return []
 
 @st.cache_data(ttl=300)
@@ -271,13 +287,14 @@ def load_posts_by_theme_sentiment(theme_name, sentiment_filter, start_date, end_
             })
         return posts_data
     except Exception as e:
-        st.error(f"Error loading theme posts: {e}")
+        st.error(f"❌ Error loading theme posts: {e}")
         return []
 
-# Load data
-overview_data = load_overview_data(start_date_str, end_date_str)
-trends_data = load_sentiment_trends(start_date_str, end_date_str)
-themes_data = load_themes_data(start_date_str, end_date_str)
+# Load data with progress indicators
+with st.spinner("Loading dashboard data..."):
+    overview_data = load_overview_data(start_date_str, end_date_str)
+    trends_data = load_sentiment_trends(start_date_str, end_date_str)
+    themes_data = load_themes_data(start_date_str, end_date_str)
 
 # Overview metrics
 st.header("📊 Overview")
@@ -307,7 +324,7 @@ with col4:
     st.metric("Avg Sentiment Score", overview_data['avg_sentiment_score'])
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Charts
+# Charts section
 st.header("📈 Analytics")
 col1, col2 = st.columns(2)
 
@@ -325,8 +342,7 @@ with col1:
         fig.update_traces(textposition='inside', textinfo='percent+label')
         fig.update_layout(height=400, showlegend=True)
         
-        # Handle pie chart clicks
-        selected_points = st.plotly_chart(fig, use_container_width=True, key="sentiment_pie")
+        st.plotly_chart(fig, use_container_width=True, key="sentiment_pie")
         
         st.write("**Quick Filter:**")
         col_a, col_b, col_c, col_d = st.columns(4)
@@ -347,149 +363,160 @@ with col1:
                 st.session_state.selected_sentiment = None
                 st.rerun()
     else:
-        st.info("No sentiment data available for selected date range.")
+        st.info("📊 No sentiment data available for selected date range.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
     st.markdown('<div class="chart-container">', unsafe_allow_html=True)
     st.subheader("Sentiment Trends")
     
-    if trends_data:
-        df_trends = pd.DataFrame(trends_data)
-        df_trends['date'] = pd.to_datetime(df_trends['date'])
-        
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df_trends['date'], y=df_trends['avg_sentiment'],
-            mode='lines+markers', name='Average Sentiment',
-            line=dict(color='#667eea', width=3), marker=dict(size=6),
-            hovertemplate='<b>%{x}</b><br>Avg Sentiment: %{y:.3f}<br>Posts: %{customdata}<extra></extra>',
-            customdata=df_trends['post_count']
-        ))
-        
-        fig.update_layout(
-            title='Average Sentiment Over Time',
-            xaxis_title='Date', yaxis_title='Average Sentiment',
-            yaxis=dict(range=[-1, 1]), height=400, hovermode='x unified'
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    if trends_data and len(trends_data) > 0:
+        try:
+            df_trends = pd.DataFrame(trends_data)
+            df_trends['date'] = pd.to_datetime(df_trends['date'])
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df_trends['date'], y=df_trends['avg_sentiment'],
+                mode='lines+markers', name='Average Sentiment',
+                line=dict(color='#667eea', width=3), marker=dict(size=6),
+                hovertemplate='<b>%{x}</b><br>Avg Sentiment: %{y:.3f}<br>Posts: %{customdata}<extra></extra>',
+                customdata=df_trends['post_count']
+            ))
+            
+            fig.update_layout(
+                title='Average Sentiment Over Time',
+                xaxis_title='Date', yaxis_title='Average Sentiment',
+                yaxis=dict(range=[-1, 1]), height=400, hovermode='x unified'
+            )
+            st.plotly_chart(fig, use_container_width=True, key="trends_chart")
+        except Exception as e:
+            st.error(f"❌ Error creating trends chart: {e}")
+            st.info("📈 Trends chart data is available but chart failed to render")
     else:
-        st.info("No trends data available for selected date range.")
+        st.info("📈 No trends data available for selected date range.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # Themes analysis with GROUPED bars (like Flask app)
-if themes_data:
+if themes_data and len(themes_data) > 0:
     st.header("🎯 Top Themes")
     st.markdown('<div class="chart-container">', unsafe_allow_html=True)
     
-    # Create DataFrame for easier manipulation
-    df_themes = pd.DataFrame(themes_data)
-    
-    # Create grouped bar chart (NOT stacked) like your Flask app
-    fig = go.Figure()
-    
-    # Add each sentiment as separate bars (grouped, not stacked)
-    fig.add_trace(go.Bar(
-        name='Positive', x=df_themes['name'], y=df_themes['positive_count'],
-        marker_color='#28a745', offsetgroup=1,
-        hovertemplate='<b>%{x}</b><br>Positive: %{y}<br><i>Click to filter posts</i><extra></extra>'
-    ))
-    
-    fig.add_trace(go.Bar(
-        name='Negative', x=df_themes['name'], y=df_themes['negative_count'],
-        marker_color='#dc3545', offsetgroup=2,
-        hovertemplate='<b>%{x}</b><br>Negative: %{y}<br><i>Click to filter posts</i><extra></extra>'
-    ))
-    
-    fig.add_trace(go.Bar(
-        name='Neutral', x=df_themes['name'], y=df_themes['neutral_count'],
-        marker_color='#6c757d', offsetgroup=3,
-        hovertemplate='<b>%{x}</b><br>Neutral: %{y}<br><i>Click to filter posts</i><extra></extra>'
-    ))
-    
-    # Set layout for grouped bars
-    fig.update_layout(
-        title='Theme Sentiment Breakdown (Click bars to filter posts below)',
-        xaxis_title='Themes', yaxis_title='Number of Posts',
-        barmode='group',  # This makes bars grouped instead of stacked
-        height=500, hovermode='x unified',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    
-    # Display chart
-    st.plotly_chart(fig, use_container_width=True, key="themes_chart")
-    
-    # Interactive theme and sentiment selection
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        selected_theme = st.selectbox(
-            "🎯 Select Theme:",
-            ["All Themes"] + [theme['name'] for theme in themes_data],
-            key="theme_selector"
+    try:
+        # Create DataFrame for easier manipulation
+        df_themes = pd.DataFrame(themes_data)
+        
+        # Create grouped bar chart (NOT stacked) like your Flask app
+        fig = go.Figure()
+        
+        # Add each sentiment as separate bars (grouped, not stacked)
+        fig.add_trace(go.Bar(
+            name='Positive', x=df_themes['name'], y=df_themes['positive_count'],
+            marker_color='#28a745', offsetgroup=1,
+            hovertemplate='<b>%{x}</b><br>Positive: %{y}<br><i>Click to filter posts</i><extra></extra>'
+        ))
+        
+        fig.add_trace(go.Bar(
+            name='Negative', x=df_themes['name'], y=df_themes['negative_count'],
+            marker_color='#dc3545', offsetgroup=2,
+            hovertemplate='<b>%{x}</b><br>Negative: %{y}<br><i>Click to filter posts</i><extra></extra>'
+        ))
+        
+        fig.add_trace(go.Bar(
+            name='Neutral', x=df_themes['name'], y=df_themes['neutral_count'],
+            marker_color='#6c757d', offsetgroup=3,
+            hovertemplate='<b>%{x}</b><br>Neutral: %{y}<br><i>Click to filter posts</i><extra></extra>'
+        ))
+        
+        # Set layout for grouped bars
+        fig.update_layout(
+            title='Theme Sentiment Breakdown (Click bars to filter posts below)',
+            xaxis_title='Themes', yaxis_title='Number of Posts',
+            barmode='group',  # This makes bars grouped instead of stacked
+            height=500, hovermode='x unified',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
-    
-    with col2:
-        selected_sentiment_dropdown = st.selectbox(
-            "😊 Select Sentiment:",
-            ["All", "positive", "negative", "neutral"],
-            key="sentiment_selector"
-        )
-    
-    with col3:
-        if st.button("🔄 Reset Filters", key="reset_filters"):
-            st.session_state.selected_theme = None
-            st.session_state.selected_sentiment = None
-            st.rerun()
-    
-    # Use session state values if they exist, otherwise use dropdown values
-    active_theme = st.session_state.selected_theme if st.session_state.selected_theme else (selected_theme if selected_theme != "All Themes" else None)
-    active_sentiment = st.session_state.selected_sentiment if st.session_state.selected_sentiment else (selected_sentiment_dropdown if selected_sentiment_dropdown != "All" else None)
-    
-    # Show filtered posts based on theme and sentiment
-    if active_theme or active_sentiment:
-        filter_text = []
-        if active_theme: filter_text.append(f"Theme: {active_theme}")
-        if active_sentiment: filter_text.append(f"Sentiment: {active_sentiment}")
         
-        st.subheader(f"📋 Filtered Posts: {' | '.join(filter_text)}")
+        # Display chart
+        st.plotly_chart(fig, use_container_width=True, key="themes_chart")
         
-        # Load posts filtered by theme and sentiment
-        theme_posts = load_posts_by_theme_sentiment(active_theme, active_sentiment, start_date_str, end_date_str)
+        # Interactive theme and sentiment selection
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            selected_theme = st.selectbox(
+                "🎯 Select Theme:",
+                ["All Themes"] + [theme['name'] for theme in themes_data],
+                key="theme_selector"
+            )
         
-        if theme_posts:
-            st.success(f"📊 Found **{len(theme_posts)}** posts matching your filters")
+        with col2:
+            selected_sentiment_dropdown = st.selectbox(
+                "😊 Select Sentiment:",
+                ["All", "positive", "negative", "neutral"],
+                key="sentiment_selector"
+            )
+        
+        with col3:
+            if st.button("🔄 Reset Filters", key="reset_filters"):
+                st.session_state.selected_theme = None
+                st.session_state.selected_sentiment = None
+                st.rerun()
+        
+        # Use session state values if they exist, otherwise use dropdown values
+        active_theme = st.session_state.selected_theme if st.session_state.selected_theme else (selected_theme if selected_theme != "All Themes" else None)
+        active_sentiment = st.session_state.selected_sentiment if st.session_state.selected_sentiment else (selected_sentiment_dropdown if selected_sentiment_dropdown != "All" else None)
+        
+        # Show filtered posts based on theme and sentiment
+        if active_theme or active_sentiment:
+            filter_text = []
+            if active_theme: filter_text.append(f"Theme: {active_theme}")
+            if active_sentiment: filter_text.append(f"Sentiment: {active_sentiment}")
             
-            # Display filtered posts
-            for i, post in enumerate(theme_posts[:20]):
-                with st.expander(f"📌 {post['title'][:80]}..." if len(post['title']) > 80 else f"📌 {post['title']}"):
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    
-                    with col1:
-                        st.markdown(f'<div class="post-card">{post["content"]}</div>', unsafe_allow_html=True)
-                        if post['url']:
-                            st.markdown(f"🔗 [View Original Post]({post['url']})")
-                    
-                    with col2:
-                        sentiment_class = f"sentiment-{post['sentiment_label']}"
-                        st.markdown(f"**Sentiment:** <span class='{sentiment_class}'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
-                        st.write(f"**Score:** {post['sentiment_score']}")
-                        if active_theme:
-                            st.write(f"**Theme:** {active_theme}")
-                    
-                    with col3:
-                        st.write(f"**👍 Upvotes:** {post['upvotes']}")
-                        st.write(f"**💬 Comments:** {post['comments_count']}")
-                        st.write(f"**👤 Author:** {post['author']}")
-                        if post['created_at']:
-                            try:
-                                created_date = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00'))
-                                st.write(f"**📅 Date:** {created_date.strftime('%m/%d/%Y')}")
-                            except:
-                                st.write(f"**📅 Date:** {post['created_at']}")
-        else:
-            st.info(f"📭 No posts found for the selected filters")
+            st.subheader(f"📋 Filtered Posts: {' | '.join(filter_text)}")
+            
+            # Load posts filtered by theme and sentiment
+            theme_posts = load_posts_by_theme_sentiment(active_theme, active_sentiment, start_date_str, end_date_str)
+            
+            if theme_posts:
+                st.success(f"📊 Found **{len(theme_posts)}** posts matching your filters")
+                
+                # Display filtered posts
+                for i, post in enumerate(theme_posts[:20]):
+                    with st.expander(f"📌 {post['title'][:80]}..." if len(post['title']) > 80 else f"📌 {post['title']}"):
+                        col1, col2, col3 = st.columns([3, 1, 1])
+                        
+                        with col1:
+                            st.markdown(f'<div class="post-card">{post["content"]}</div>', unsafe_allow_html=True)
+                            if post['url']:
+                                st.markdown(f"🔗 [View Original Post]({post['url']})")
+                        
+                        with col2:
+                            sentiment_class = f"sentiment-{post['sentiment_label']}"
+                            st.markdown(f"**Sentiment:** <span class='{sentiment_class}'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
+                            st.write(f"**Score:** {post['sentiment_score']}")
+                            if active_theme:
+                                st.write(f"**Theme:** {active_theme}")
+                        
+                        with col3:
+                            st.write(f"**👍 Upvotes:** {post['upvotes']}")
+                            st.write(f"**💬 Comments:** {post['comments_count']}")
+                            st.write(f"**👤 Author:** {post['author']}")
+                            if post['created_at']:
+                                try:
+                                    created_date = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00'))
+                                    st.write(f"**📅 Date:** {created_date.strftime('%m/%d/%Y')}")
+                                except:
+                                    st.write(f"**📅 Date:** {post['created_at']}")
+            else:
+                st.info(f"📭 No posts found for the selected filters")
+    
+    except Exception as e:
+        st.error(f"❌ Error creating themes chart: {e}")
+        st.info("🎯 Themes data is available but chart failed to render")
     
     st.markdown('</div>', unsafe_allow_html=True)
+else:
+    st.info("🎯 No themes data available for selected date range.")
 
 # Recent posts section
 st.header("📝 Recent Posts")

@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sqlite3
 import os
+import time
 
 # Page configuration
 st.set_page_config(
@@ -53,17 +54,6 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         margin: 1rem 0;
     }
-    .clickable-theme {
-        background: #f8f9fa;
-        padding: 0.5rem;
-        border-radius: 0.3rem;
-        margin: 0.2rem 0;
-        border: 1px solid #e9ecef;
-    }
-    .theme-button {
-        margin: 0.1rem;
-        border-radius: 0.2rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -76,7 +66,14 @@ if 'selected_sentiment' not in st.session_state:
 # Database connection with better error handling
 @st.cache_resource
 def get_db_connection():
-    db_paths = ['gusto_monitor.db', 'backend/gusto_monitor.db', './gusto_monitor.db']
+    # Look for database in various locations relative to the pages directory
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    db_paths = [
+        os.path.join(current_dir, 'gusto_social_media_monitor', 'gusto_monitor.db'),
+        os.path.join(current_dir, '..', 'gusto_monitor.db'),
+        'gusto_monitor.db'
+    ]
+    
     for db_path in db_paths:
         if os.path.exists(db_path):
             try:
@@ -89,7 +86,7 @@ def get_db_connection():
                 st.warning(f"⚠️ Database error for {db_path}: {e}")
                 continue
     
-    st.error("❌ No database found! App will show empty data.")
+    st.error("❌ No database found! Please ensure the database file is available. App will show empty data.")
     return sqlite3.connect(':memory:', check_same_thread=False)
 
 conn = get_db_connection()
@@ -114,7 +111,15 @@ end_date_str = end_date.strftime('%Y-%m-%d')
 platform_filter = st.sidebar.selectbox("Platform", ["All", "reddit"], index=0)
 sentiment_filter = st.sidebar.selectbox("Sentiment", ["All", "positive", "negative", "neutral"], index=0)
 
-# Data functions
+# Auto-refresh option
+st.sidebar.markdown("---")
+st.sidebar.header("🔄 Auto-Refresh")
+auto_refresh = st.sidebar.checkbox("Enable auto-refresh (every 5 minutes)")
+if auto_refresh:
+    time.sleep(300)  # 5 minutes
+    st.rerun()
+
+# Data functions with improved error handling
 @st.cache_data(ttl=300)
 def load_overview_data(start_date, end_date):
     try:
@@ -124,8 +129,12 @@ def load_overview_data(start_date, end_date):
             where_conditions.append(f"DATE(created_at) BETWEEN '{start_date}' AND '{end_date}'")
         where_clause = " AND ".join(where_conditions)
         
+        # Test the query first
         cursor.execute(f"SELECT COUNT(*) FROM social_media_posts WHERE {where_clause}")
         total_posts = cursor.fetchone()[0] or 0
+        
+        if total_posts == 0:
+            st.warning("⚠️ No posts found in database for the selected date range")
         
         cursor.execute(f"SELECT sentiment_label, COUNT(*) FROM social_media_posts WHERE {where_clause} AND sentiment_label IS NOT NULL GROUP BY sentiment_label")
         sentiment_data = cursor.fetchall()
@@ -175,6 +184,9 @@ def load_sentiment_trends(start_date, end_date):
                 'positive_count': row[3], 'negative_count': row[4], 'neutral_count': row[5]
             })
         
+        if not trends_data:
+            st.warning("⚠️ No trends data available for selected date range")
+        
         return trends_data
     except Exception as e:
         st.error(f"❌ Error loading sentiment trends: {e}")
@@ -214,9 +226,42 @@ def load_themes_data(start_date, end_date):
                 'neutral_count': row[6]
             })
         
+        if not themes:
+            st.warning("⚠️ No themes data available for selected date range")
+        
         return themes
     except Exception as e:
         st.error(f"❌ Error loading themes data: {e}")
+        return []
+
+@st.cache_data(ttl=300)
+def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
+    try:
+        cursor = conn.cursor()
+        where_conditions = ["platform = 'reddit'"]
+        if start_date and end_date:
+            where_conditions.append(f"DATE(created_at) BETWEEN '{start_date}' AND '{end_date}'")
+        if sentiment_filter_val != "All":
+            where_conditions.append(f"sentiment_label = '{sentiment_filter_val}'")
+        where_clause = " AND ".join(where_conditions)
+        
+        cursor.execute(f"""
+            SELECT title, content, author, sentiment_label, sentiment_score, upvotes, comments_count, created_at, url, id
+            FROM social_media_posts WHERE {where_clause} ORDER BY created_at DESC LIMIT {limit}
+        """)
+        
+        posts_data = []
+        for row in cursor.fetchall():
+            posts_data.append({
+                'id': row[9], 'title': row[0] or 'No title',
+                'content': row[1][:200] + '...' if row[1] and len(row[1]) > 200 else (row[1] or ''),
+                'author': row[2] or 'Unknown', 'sentiment_label': row[3] or 'neutral',
+                'sentiment_score': round(row[4] or 0, 3), 'upvotes': row[5] or 0,
+                'comments_count': row[6] or 0, 'created_at': row[7], 'url': row[8]
+            })
+        return posts_data
+    except Exception as e:
+        st.error(f"❌ Error loading posts data: {e}")
         return []
 
 @st.cache_data(ttl=300)
@@ -261,7 +306,7 @@ def load_posts_by_theme_sentiment(theme_name, sentiment_filter, start_date, end_
         st.error(f"❌ Error loading theme posts: {e}")
         return []
 
-# Load data
+# Load data with progress indicators
 with st.spinner("Loading dashboard data..."):
     overview_data = load_overview_data(start_date_str, end_date_str)
     trends_data = load_sentiment_trends(start_date_str, end_date_str)
@@ -272,35 +317,26 @@ st.header("📊 Overview")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.markdown('<div class="metric-container">', unsafe_allow_html=True)
     st.metric("Total Posts", f"{overview_data['total_posts']:,}")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
-    st.markdown('<div class="metric-container">', unsafe_allow_html=True)
     st.metric("Recent (7 days)", f"{overview_data['recent_posts_7_days']:,}")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with col3:
     positive_rate = 0
     if overview_data['total_posts'] > 0:
         positive_count = overview_data['sentiment_breakdown'].get('positive', 0)
         positive_rate = round((positive_count / overview_data['total_posts']) * 100, 1)
-    st.markdown('<div class="metric-container">', unsafe_allow_html=True)
     st.metric("Positive Rate", f"{positive_rate}%")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with col4:
-    st.markdown('<div class="metric-container">', unsafe_allow_html=True)
     st.metric("Avg Sentiment Score", overview_data['avg_sentiment_score'])
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # Charts section
 st.header("📈 Analytics")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
     st.subheader("Sentiment Breakdown")
     
     if sum(overview_data['sentiment_breakdown'].values()) > 0:
@@ -309,7 +345,7 @@ with col1:
         
         fig = px.pie(values=counts, names=sentiments,
                     color_discrete_map={'positive': '#28a745', 'negative': '#dc3545', 'neutral': '#6c757d'},
-                    title="Sentiment Distribution")
+                    title="Click pie slices to filter posts below")
         fig.update_traces(textposition='inside', textinfo='percent+label')
         fig.update_layout(height=400, showlegend=True)
         
@@ -320,29 +356,23 @@ with col1:
         with col_a:
             if st.button("🟢 Positive", key="pos_btn"):
                 st.session_state.selected_sentiment = "positive"
-                st.session_state.selected_theme = None
                 st.rerun()
         with col_b:
             if st.button("🔴 Negative", key="neg_btn"):
                 st.session_state.selected_sentiment = "negative"
-                st.session_state.selected_theme = None
                 st.rerun()
         with col_c:
             if st.button("⚪ Neutral", key="neu_btn"):
                 st.session_state.selected_sentiment = "neutral"
-                st.session_state.selected_theme = None
                 st.rerun()
         with col_d:
             if st.button("🔄 All", key="all_btn"):
                 st.session_state.selected_sentiment = None
-                st.session_state.selected_theme = None
                 st.rerun()
     else:
-        st.info("📊 No sentiment data available.")
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.info("📊 No sentiment data available for selected date range.")
 
 with col2:
-    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
     st.subheader("Sentiment Trends")
     
     if trends_data and len(trends_data) > 0:
@@ -364,209 +394,196 @@ with col2:
                 xaxis_title='Date', yaxis_title='Average Sentiment',
                 yaxis=dict(range=[-1, 1]), height=400, hovermode='x unified'
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key="trends_chart")
         except Exception as e:
             st.error(f"❌ Error creating trends chart: {e}")
+            st.info("📈 Trends chart data is available but chart failed to render")
     else:
-        st.info("📈 No trends data available.")
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.info("📈 No trends data available for selected date range.")
 
-# Themes analysis with RELIABLE clickable interface (like Flask app functionality)
+# Themes analysis with GROUPED bars
 if themes_data and len(themes_data) > 0:
     st.header("🎯 Top Themes")
-    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
     
-    # Show the visual chart first
     try:
+        # Create DataFrame for easier manipulation
         df_themes = pd.DataFrame(themes_data)
         
-        # Create grouped bar chart for visualization
+        # Create grouped bar chart (NOT stacked)
         fig = go.Figure()
         
+        # Add each sentiment as separate bars (grouped, not stacked)
         fig.add_trace(go.Bar(
             name='Positive', x=df_themes['name'], y=df_themes['positive_count'],
-            marker_color='#28a745', offsetgroup=1
+            marker_color='#28a745', offsetgroup=1,
+            hovertemplate='<b>%{x}</b><br>Positive: %{y}<br><i>Click to filter posts</i><extra></extra>'
         ))
         
         fig.add_trace(go.Bar(
             name='Negative', x=df_themes['name'], y=df_themes['negative_count'],
-            marker_color='#dc3545', offsetgroup=2
+            marker_color='#dc3545', offsetgroup=2,
+            hovertemplate='<b>%{x}</b><br>Negative: %{y}<br><i>Click to filter posts</i><extra></extra>'
         ))
         
         fig.add_trace(go.Bar(
             name='Neutral', x=df_themes['name'], y=df_themes['neutral_count'],
-            marker_color='#6c757d', offsetgroup=3
+            marker_color='#6c757d', offsetgroup=3,
+            hovertemplate='<b>%{x}</b><br>Neutral: %{y}<br><i>Click to filter posts</i><extra></extra>'
         ))
         
+        # Set layout for grouped bars
         fig.update_layout(
-            title='Theme Sentiment Breakdown (Use buttons below to filter posts)',
+            title='Theme Sentiment Breakdown (Click bars to filter posts below)',
             xaxis_title='Themes', yaxis_title='Number of Posts',
-            barmode='group', height=500, hovermode='x unified',
+            barmode='group',  # This makes bars grouped instead of stacked
+            height=500, hovermode='x unified',
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        # Display chart
+        st.plotly_chart(fig, use_container_width=True, key="themes_chart")
         
-    except Exception as e:
-        st.error(f"❌ Error creating chart: {e}")
-    
-    # RELIABLE CLICKABLE INTERFACE - replaces chart clicks
-    st.markdown("---")
-    st.subheader("🖱️ Click Theme + Sentiment Buttons (Replaces Chart Clicks)")
-    st.info("💡 **This works exactly like clicking bars in your Flask app!** Choose any theme + sentiment combination:")
-    
-    # Create clickable interface for each theme (exactly like Flask functionality)
-    for i, theme in enumerate(themes_data):
-        st.markdown(f"### **{theme['name']}** ({theme['total_mentions']} total posts)")
+        # Create clickable buttons for each theme-sentiment combination
+        st.markdown("---")
+        st.subheader("🎯 Click Theme + Sentiment to Filter Posts")
         
-        # Create buttons for each sentiment - EXACTLY like clicking bars in Flask
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            if theme['positive_count'] > 0:
-                if st.button(f"🟢 Positive ({theme['positive_count']})", 
-                           key=f"theme_{i}_positive", 
-                           help=f"Show {theme['positive_count']} positive posts about {theme['name']}"):
+        # Create interactive buttons for each theme and sentiment
+        for i, theme in enumerate(themes_data[:5]):  # Show top 5 themes for space
+            st.markdown(f"**{theme['name']}** (Total: {theme['total_mentions']})")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                if theme['positive_count'] > 0:
+                    if st.button(f"🟢 Positive ({theme['positive_count']})", key=f"pos_{i}_{theme['name']}"):
+                        st.session_state.selected_theme = theme['name']
+                        st.session_state.selected_sentiment = "positive"
+                        st.rerun()
+            
+            with col2:
+                if theme['negative_count'] > 0:
+                    if st.button(f"🔴 Negative ({theme['negative_count']})", key=f"neg_{i}_{theme['name']}"):
+                        st.session_state.selected_theme = theme['name']
+                        st.session_state.selected_sentiment = "negative"
+                        st.rerun()
+            
+            with col3:
+                if theme['neutral_count'] > 0:
+                    if st.button(f"⚪ Neutral ({theme['neutral_count']})", key=f"neu_{i}_{theme['name']}"):
+                        st.session_state.selected_theme = theme['name']
+                        st.session_state.selected_sentiment = "neutral"
+                        st.rerun()
+            
+            with col4:
+                if st.button(f"📊 All ({theme['total_mentions']})", key=f"all_{i}_{theme['name']}"):
                     st.session_state.selected_theme = theme['name']
-                    st.session_state.selected_sentiment = "positive"
+                    st.session_state.selected_sentiment = None
                     st.rerun()
-            else:
-                st.write("🟢 Positive (0)")
+        
+        # Manual selection dropdowns
+        st.markdown("---")
+        st.subheader("🔧 Manual Selection")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            selected_theme = st.selectbox(
+                "🎯 Select Theme:",
+                ["All Themes"] + [theme['name'] for theme in themes_data],
+                key="theme_selector"
+            )
         
         with col2:
-            if theme['negative_count'] > 0:
-                if st.button(f"🔴 Negative ({theme['negative_count']})", 
-                           key=f"theme_{i}_negative",
-                           help=f"Show {theme['negative_count']} negative posts about {theme['name']}"):
-                    st.session_state.selected_theme = theme['name']
-                    st.session_state.selected_sentiment = "negative"
-                    st.rerun()
-            else:
-                st.write("🔴 Negative (0)")
+            selected_sentiment_dropdown = st.selectbox(
+                "😊 Select Sentiment:",
+                ["All", "positive", "negative", "neutral"],
+                key="sentiment_selector"
+            )
         
         with col3:
-            if theme['neutral_count'] > 0:
-                if st.button(f"⚪ Neutral ({theme['neutral_count']})", 
-                           key=f"theme_{i}_neutral",
-                           help=f"Show {theme['neutral_count']} neutral posts about {theme['name']}"):
-                    st.session_state.selected_theme = theme['name']
-                    st.session_state.selected_sentiment = "neutral"
-                    st.rerun()
-            else:
-                st.write("⚪ Neutral (0)")
-        
-        with col4:
-            if st.button(f"📊 All Sentiments ({theme['total_mentions']})", 
-                       key=f"theme_{i}_all",
-                       help=f"Show all {theme['total_mentions']} posts about {theme['name']}"):
-                st.session_state.selected_theme = theme['name']
+            if st.button("🔄 Reset All Filters", key="reset_filters"):
+                st.session_state.selected_theme = None
                 st.session_state.selected_sentiment = None
                 st.rerun()
         
-        with col5:
-            st.write(f"*{theme['description'][:50]}...*" if theme['description'] else "*No description*")
+        # Update session state from dropdowns if no button was clicked
+        if selected_theme != "All Themes" and not st.session_state.get('selected_theme'):
+            st.session_state.selected_theme = selected_theme
+        if selected_sentiment_dropdown != "All" and not st.session_state.get('selected_sentiment'):
+            st.session_state.selected_sentiment = selected_sentiment_dropdown
         
-        st.markdown("---")
-    
-    # Reset button
-    if st.button("🔄 Reset All Filters", key="reset_all_filters", type="secondary"):
-        st.session_state.selected_theme = None
-        st.session_state.selected_sentiment = None
-        st.rerun()
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Show filtered posts if selection made
-    if st.session_state.get('selected_theme') or st.session_state.get('selected_sentiment'):
+        # Use session state values for active filtering
         active_theme = st.session_state.get('selected_theme')
         active_sentiment = st.session_state.get('selected_sentiment')
         
         # Show current selection
-        filter_display = []
-        if active_theme: filter_display.append(f"**Theme:** {active_theme}")
-        if active_sentiment: filter_display.append(f"**Sentiment:** {active_sentiment.title()}")
-        st.success(f"🎯 **Showing Posts:** {' | '.join(filter_display)}")
+        if active_theme or active_sentiment:
+            filter_display = []
+            if active_theme: filter_display.append(f"**Theme:** {active_theme}")
+            if active_sentiment: filter_display.append(f"**Sentiment:** {active_sentiment.title()}")
+            st.info(f"🎯 **Active Filters:** {' | '.join(filter_display)}")
         
-        # Load and display filtered posts
-        theme_posts = load_posts_by_theme_sentiment(active_theme, active_sentiment, start_date_str, end_date_str)
-        
-        if theme_posts:
-            st.subheader(f"📋 Found {len(theme_posts)} Matching Posts")
+        # Show filtered posts based on theme and sentiment
+        if active_theme or active_sentiment:
+            filter_text = []
+            if active_theme: filter_text.append(f"Theme: {active_theme}")
+            if active_sentiment: filter_text.append(f"Sentiment: {active_sentiment}")
             
-            # Display posts
-            for i, post in enumerate(theme_posts[:20]):
-                with st.expander(f"📌 {post['title'][:80]}..." if len(post['title']) > 80 else f"📌 {post['title']}"):
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    
-                    with col1:
-                        st.markdown(f'<div class="post-card">{post["content"]}</div>', unsafe_allow_html=True)
-                        if post['url']:
-                            st.markdown(f"🔗 [View Original Post]({post['url']})")
-                    
-                    with col2:
-                        sentiment_class = f"sentiment-{post['sentiment_label']}"
-                        st.markdown(f"**Sentiment:** <span class='{sentiment_class}'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
-                        st.write(f"**Score:** {post['sentiment_score']}")
-                        if active_theme:
-                            st.write(f"**Theme:** {active_theme}")
-                    
-                    with col3:
-                        st.write(f"**👍 Upvotes:** {post['upvotes']}")
-                        st.write(f"**💬 Comments:** {post['comments_count']}")
-                        st.write(f"**👤 Author:** {post['author']}")
-                        if post['created_at']:
-                            try:
-                                created_date = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00'))
-                                st.write(f"**📅 Date:** {created_date.strftime('%m/%d/%Y')}")
-                            except:
-                                st.write(f"**📅 Date:** {post['created_at']}")
-        else:
-            st.info("📭 No posts found for the selected filters")
-
+            st.subheader(f"📋 Filtered Posts: {' | '.join(filter_text)}")
+            
+            # Load posts filtered by theme and sentiment
+            theme_posts = load_posts_by_theme_sentiment(active_theme, active_sentiment, start_date_str, end_date_str)
+            
+            if theme_posts:
+                st.success(f"📊 Found **{len(theme_posts)}** posts matching your filters")
+                
+                # Display filtered posts
+                for i, post in enumerate(theme_posts[:20]):
+                    with st.expander(f"📌 {post['title'][:80]}..." if len(post['title']) > 80 else f"📌 {post['title']}"):
+                        col1, col2, col3 = st.columns([3, 1, 1])
+                        
+                        with col1:
+                            st.markdown(f'<div class="post-card">{post["content"]}</div>', unsafe_allow_html=True)
+                            if post['url']:
+                                st.markdown(f"🔗 [View Original Post]({post['url']})")
+                        
+                        with col2:
+                            sentiment_class = f"sentiment-{post['sentiment_label']}"
+                            st.markdown(f"**Sentiment:** <span class='{sentiment_class}'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
+                            st.write(f"**Score:** {post['sentiment_score']}")
+                            if active_theme:
+                                st.write(f"**Theme:** {active_theme}")
+                        
+                        with col3:
+                            st.write(f"**👍 Upvotes:** {post['upvotes']}")
+                            st.write(f"**💬 Comments:** {post['comments_count']}")
+                            st.write(f"**👤 Author:** {post['author']}")
+                            if post['created_at']:
+                                try:
+                                    created_date = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00'))
+                                    st.write(f"**📅 Date:** {created_date.strftime('%m/%d/%Y')}")
+                                except:
+                                    st.write(f"**📅 Date:** {post['created_at']}")
+            else:
+                st.info(f"📭 No posts found for the selected filters")
+    
+    except Exception as e:
+        st.error(f"❌ Error creating themes chart: {e}")
+        st.info("🎯 Themes data is available but chart failed to render")
 else:
-    st.info("🎯 No themes data available.")
+    st.info("🎯 No themes data available for selected date range.")
 
 # Recent posts section
 st.header("📝 Recent Posts")
-active_sentiment_filter = st.session_state.get('selected_sentiment') or (sentiment_filter if sentiment_filter != "All" else None)
 
-@st.cache_data(ttl=300)
-def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
-    try:
-        cursor = conn.cursor()
-        where_conditions = ["platform = 'reddit'"]
-        if start_date and end_date:
-            where_conditions.append(f"DATE(created_at) BETWEEN '{start_date}' AND '{end_date}'")
-        if sentiment_filter_val != "All":
-            where_conditions.append(f"sentiment_label = '{sentiment_filter_val}'")
-        where_clause = " AND ".join(where_conditions)
-        
-        cursor.execute(f"""
-            SELECT title, content, author, sentiment_label, sentiment_score, upvotes, comments_count, created_at, url, id
-            FROM social_media_posts WHERE {where_clause} ORDER BY created_at DESC LIMIT {limit}
-        """)
-        
-        posts_data = []
-        for row in cursor.fetchall():
-            posts_data.append({
-                'id': row[9], 'title': row[0] or 'No title',
-                'content': row[1][:200] + '...' if row[1] and len(row[1]) > 200 else (row[1] or ''),
-                'author': row[2] or 'Unknown', 'sentiment_label': row[3] or 'neutral',
-                'sentiment_score': round(row[4] or 0, 3), 'upvotes': row[5] or 0,
-                'comments_count': row[6] or 0, 'created_at': row[7], 'url': row[8]
-            })
-        return posts_data
-    except Exception as e:
-        st.error(f"❌ Error loading posts: {e}")
-        return []
-
-posts_data = load_posts_data(start_date_str, end_date_str, active_sentiment_filter or "All")
+# Use session state sentiment if available, otherwise use sidebar filter
+active_sentiment_filter = st.session_state.selected_sentiment if st.session_state.selected_sentiment else sentiment_filter
+posts_data = load_posts_data(start_date_str, end_date_str, active_sentiment_filter if active_sentiment_filter != "All" else "All")
 
 if posts_data:
-    if active_sentiment_filter:
+    if active_sentiment_filter and active_sentiment_filter != "All":
         st.info(f"Showing posts filtered by sentiment: **{active_sentiment_filter}**")
     
-    for post in posts_data[:15]:
+    for post in posts_data[:15]:  # Show top 15 posts
         with st.expander(f"🔸 {post['title'][:100]}..." if len(post['title']) > 100 else f"🔸 {post['title']}"):
             col1, col2, col3 = st.columns([2, 1, 1])
             
@@ -591,7 +608,7 @@ if posts_data:
                     except:
                         st.write(f"**📅 Date:** {post['created_at']}")
 else:
-    st.info("📭 No posts found.")
+    st.info("📭 No posts found for the selected filters.")
 
 # Footer
 st.markdown("---")

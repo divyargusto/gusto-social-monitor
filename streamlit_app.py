@@ -553,22 +553,27 @@ if overview_data:
             sentiments = list(overview_data['sentiment_breakdown'].keys())
             counts = list(overview_data['sentiment_breakdown'].values())
             
-            # Create pie chart
-            fig = px.pie(
+            # Create pie chart with explicit colors to ensure proper green/red/gray scheme
+            colors = []
+            for sentiment in sentiments:
+                if sentiment == "positive":
+                    colors.append("#28a745")  # Green
+                elif sentiment == "negative":
+                    colors.append("#dc3545")  # Red
+                elif sentiment == "neutral":
+                    colors.append("#6c757d")  # Gray
+                else:
+                    colors.append("#6c757d")  # Default to gray
+            
+            fig = go.Figure(data=[go.Pie(
+                labels=sentiments,
                 values=counts,
-                names=sentiments,
-                color_discrete_map={
-                    'positive': '#28a745',
-                    'negative': '#dc3545',
-                    'neutral': '#6c757d'
-                },
-                title="Sentiment Distribution"
-            )
-            fig.update_traces(
-                textposition='inside', 
-                textinfo='percent+label',
-                hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<br><i>Click buttons below to filter posts</i><extra></extra>'
-            )
+                marker=dict(colors=colors),
+                textposition="inside",
+                textinfo="percent+label",
+                hovertemplate="<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<br><i>Click buttons below to filter posts</i><extra></extra>"
+            )])
+            fig.update_layout(title="Sentiment Distribution")
             st.plotly_chart(fig, use_container_width=True)
             
             # Add sentiment filter buttons

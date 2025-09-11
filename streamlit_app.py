@@ -889,37 +889,32 @@ if overview_data:
     posts_data = load_posts_data(start_date, end_date, active_sentiment_filter)
     
     if posts_data:
-        for i, post in enumerate(posts_data[:10]):  # Show top 10 posts
-            # Create a post card
-            st.markdown(f"""
-            <div style='background: #ffffff; padding: 1.5rem; border-radius: 0.8rem; margin: 1rem 0; 
-                        border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
-                <h4 style='color: #1f77b4; margin-bottom: 0.5rem;'>{post['title']}</h4>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            col1, col2, col3 = st.columns([3, 1, 1])
+        for i, post in enumerate(posts_data[:15]):  # Show top 15 posts
+            col1, col2, col3 = st.columns([4, 1, 1])
             
             with col1:
-                st.write(post['content'])
+                # Clean title and content
+                st.markdown(f"**{post['title']}**")
+                st.write(post['content'][:200] + "..." if len(post['content']) > 200 else post['content'])
                 if post['url']:
-                    st.markdown(f"🔗 [View Original Post]({post['url']})")
+                    st.markdown(f"[🔗 View Post]({post['url']})")
             
             with col2:
-                # Color-coded sentiment
-                sentiment_colors = {'positive': '#28a745', 'negative': '#dc3545', 'neutral': '#6c757d'}
-                color = sentiment_colors.get(post['sentiment_label'], '#6c757d')
-                st.markdown(f"**Sentiment:** <span style='color: {color}; font-weight: bold;'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
-                st.write(f"**Score:** {post['sentiment_score']}")
-                st.write(f"**Author:** {post['author'] or 'Unknown'}")
+                # Compact sentiment info
+                sentiment_emoji = {'positive': '🟢', 'negative': '🔴', 'neutral': '⚪'}
+                emoji = sentiment_emoji.get(post['sentiment_label'], '⚪')
+                st.write(f"{emoji} {post['sentiment_label'].title()}")
+                st.write(f"Score: {post['sentiment_score']}")
             
             with col3:
-                st.write(f"**👍 Upvotes:** {post['upvotes'] or 0}")
-                st.write(f"**💬 Comments:** {post['comments_count'] or 0}")
+                # Compact stats
+                st.write(f"👍 {post['upvotes'] or 0}")
+                st.write(f"💬 {post['comments_count'] or 0}")
                 if post['created_at']:
-                    st.write(f"**📅 Date:** {post['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                    date_str = post['created_at'].strftime('%m/%d')
+                    st.write(f"📅 {date_str}")
             
-            st.markdown("---")  # Add separator between posts
+            st.divider()  # Clean separator
     else:
         st.info("No posts found for the selected filters.")
 

@@ -746,84 +746,137 @@ if overview_data:
         # Display the chart
         st.plotly_chart(fig, use_container_width=True, key="themes_chart")
         
-        # Interactive theme and sentiment selection with buttons
-        st.markdown("### 📋 Theme Posts")
+        # Quick action buttons for each theme-sentiment combination
+        st.markdown("### 🎯 Quick Theme Filters")
+        st.markdown("Click any button below to filter posts by theme and sentiment:")
         
-        # Create columns for theme and sentiment selection
+        # Create buttons for each theme-sentiment combination
+        for theme in themes_data:
+            if theme['positive_count'] > 0 or theme['negative_count'] > 0 or theme['neutral_count'] > 0:
+                col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                
+                with col1:
+                    st.write(f"**{theme['name']}**")
+                
+                with col2:
+                    if theme['positive_count'] > 0:
+                        if st.button(f"🟢 {theme['positive_count']}", key=f"pos_{theme['name']}"):
+                            st.session_state.selected_theme_filter = theme['name']
+                            st.session_state.selected_sentiment_filter = "positive"
+                            st.session_state.show_filtered_posts = True
+                            st.rerun()
+                
+                with col3:
+                    if theme['negative_count'] > 0:
+                        if st.button(f"🔴 {theme['negative_count']}", key=f"neg_{theme['name']}"):
+                            st.session_state.selected_theme_filter = theme['name']
+                            st.session_state.selected_sentiment_filter = "negative"
+                            st.session_state.show_filtered_posts = True
+                            st.rerun()
+                
+                with col4:
+                    if theme['neutral_count'] > 0:
+                        if st.button(f"⚪ {theme['neutral_count']}", key=f"neu_{theme['name']}"):
+                            st.session_state.selected_theme_filter = theme['name']
+                            st.session_state.selected_sentiment_filter = "neutral"
+                            st.session_state.show_filtered_posts = True
+                            st.rerun()
+        
+        # Clear filter button
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("🔄 Clear All Filters", key="clear_all_filters"):
+                if 'selected_theme_filter' in st.session_state:
+                    del st.session_state.selected_theme_filter
+                if 'selected_sentiment_filter' in st.session_state:
+                    del st.session_state.selected_sentiment_filter
+                if 'show_filtered_posts' in st.session_state:
+                    del st.session_state.show_filtered_posts
+                st.rerun()
+        
+        # Alternative manual selection
+        st.markdown("### 📋 Manual Selection")
+        
         col1, col2, col3 = st.columns([2, 2, 1])
         
         with col1:
-            selected_theme = st.selectbox(
+            manual_theme = st.selectbox(
                 "🎯 Select Theme:",
                 ["All Themes"] + [theme['name'] for theme in themes_data],
-                key="theme_selector"
+                key="manual_theme_selector"
             )
         
         with col2:
-            selected_sentiment = st.selectbox(
+            manual_sentiment = st.selectbox(
                 "😊 Select Sentiment:",
                 ["All", "positive", "negative", "neutral"],
-                key="sentiment_selector"
+                key="manual_sentiment_selector"
             )
         
         with col3:
-            st.markdown("<br>", unsafe_allow_html=True)  # Add spacing
-            if st.button("🔄 Clear Filter", key="clear_filter"):
-                st.session_state.theme_selector = "All Themes"
-                st.session_state.sentiment_selector = "All"
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🔍 Apply Filter", key="apply_manual_filter"):
+                st.session_state.selected_theme_filter = manual_theme if manual_theme != "All Themes" else None
+                st.session_state.selected_sentiment_filter = manual_sentiment if manual_sentiment != "All" else None
+                st.session_state.show_filtered_posts = True
                 st.rerun()
         
-        # Load and display filtered posts
-        if selected_theme != "All Themes" or selected_sentiment != "All":
-            theme_to_filter = selected_theme if selected_theme != "All Themes" else None
-            sentiment_to_filter = selected_sentiment if selected_sentiment != "All" else None
+        # Display filtered posts based on session state
+        if hasattr(st.session_state, 'show_filtered_posts') and st.session_state.show_filtered_posts:
+            theme_filter = st.session_state.get('selected_theme_filter')
+            sentiment_filter = st.session_state.get('selected_sentiment_filter')
             
-            st.subheader(f"📋 Posts: {selected_theme} → {selected_sentiment}")
-            
-            # Load theme-filtered posts
-            theme_posts = load_posts_by_theme_sentiment(
-                theme_to_filter,
-                sentiment_to_filter,
-                start_date,
-                end_date
-            )
-            
-            if theme_posts:
-                st.success(f"📊 Found **{len(theme_posts)}** posts matching your filters")
+            if theme_filter or sentiment_filter:
+                display_theme = theme_filter or "All Themes"
+                display_sentiment = sentiment_filter or "All"
                 
-                # Display filtered posts
-                for i, post in enumerate(theme_posts[:15]):  # Show top 15
-                    with st.expander(f"📌 {post['title'][:80]}..." if len(post['title']) > 80 else f"📌 {post['title']}"):
-                        col1, col2, col3 = st.columns([3, 1, 1])
-                        
-                        with col1:
-                            st.markdown(f'<div style="background: #ffffff; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #667eea;">{post["content"]}</div>', unsafe_allow_html=True)
-                            if post['url']:
-                                st.markdown(f"🔗 [View Original Post]({post['url']})")
-                        
-                        with col2:
-                            sentiment_color = {'positive': '#28a745', 'negative': '#dc3545', 'neutral': '#6c757d'}
-                            color = sentiment_color.get(post['sentiment_label'], '#6c757d')
-                            st.markdown(f"**Sentiment:** <span style='color: {color}; font-weight: bold;'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
-                            st.write(f"**Score:** {post['sentiment_score']}")
-                            st.write(f"**Author:** {post['author']}")
-                        
-                        with col3:
-                            st.write(f"**👍 Upvotes:** {post['upvotes']}")
-                            st.write(f"**💬 Comments:** {post['comments_count']}")
-                            if post['created_at']:
-                                try:
-                                    if isinstance(post['created_at'], str):
-                                        created_date = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00'))
-                                    else:
-                                        created_date = post['created_at']
-                                    st.write(f"**📅 Date:** {created_date.strftime('%m/%d/%Y')}")
-                                except:
-                                    st.write(f"**📅 Date:** {post['created_at']}")
-            else:
-                st.info(f"📭 No posts found for theme '{selected_theme}' with sentiment '{selected_sentiment}'")
+                st.markdown("### 📋 Filtered Posts")
+                st.info(f"🔍 **Active Filter:** {display_theme} → {display_sentiment}")
+                
+                # Load theme-filtered posts
+                theme_posts = load_posts_by_theme_sentiment(
+                    theme_filter,
+                    sentiment_filter,
+                    start_date,
+                    end_date
+                )
+                
+                if theme_posts:
+                    st.success(f"📊 Found **{len(theme_posts)}** posts matching your filters")
+                    
+                    # Display filtered posts
+                    for i, post in enumerate(theme_posts[:15]):  # Show top 15
+                        with st.expander(f"📌 {post['title'][:80]}..." if len(post['title']) > 80 else f"📌 {post['title']}"):
+                            col1, col2, col3 = st.columns([3, 1, 1])
+                            
+                            with col1:
+                                st.markdown(f'<div style="background: #ffffff; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #667eea;">{post["content"]}</div>', unsafe_allow_html=True)
+                                if post['url']:
+                                    st.markdown(f"🔗 [View Original Post]({post['url']})")
+                            
+                            with col2:
+                                sentiment_color = {'positive': '#28a745', 'negative': '#dc3545', 'neutral': '#6c757d'}
+                                color = sentiment_color.get(post['sentiment_label'], '#6c757d')
+                                st.markdown(f"**Sentiment:** <span style='color: {color}; font-weight: bold;'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
+                                st.write(f"**Score:** {post['sentiment_score']}")
+                                st.write(f"**Author:** {post['author']}")
+                            
+                            with col3:
+                                st.write(f"**👍 Upvotes:** {post['upvotes']}")
+                                st.write(f"**💬 Comments:** {post['comments_count']}")
+                                if post['created_at']:
+                                    try:
+                                        if isinstance(post['created_at'], str):
+                                            created_date = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00'))
+                                        else:
+                                            created_date = post['created_at']
+                                        st.write(f"**📅 Date:** {created_date.strftime('%m/%d/%Y')}")
+                                    except:
+                                        st.write(f"**📅 Date:** {post['created_at']}")
+                else:
+                    st.warning(f"📭 No posts found for theme '{display_theme}' with sentiment '{display_sentiment}'")
         else:
-            st.info("👆 Select a theme and/or sentiment above to view filtered posts, or click on the chart bars!")
+            st.info("👆 Click any colored button above to filter posts by theme and sentiment!")
 
     # Recent posts section
     st.header("📝 Recent Posts")
@@ -837,25 +890,36 @@ if overview_data:
     
     if posts_data:
         for i, post in enumerate(posts_data[:10]):  # Show top 10 posts
-            with st.expander(f"{post['title'][:100]}..." if len(post['title']) > 100 else post['title']):
-                col1, col2, col3 = st.columns([2, 1, 1])
-                
-                with col1:
-                    st.write(post['content'])
-                    if post['url']:
-                        st.markdown(f"[View Original Post]({post['url']})")
-                
-                with col2:
-                    sentiment_class = f"sentiment-{post['sentiment_label']}"
-                    st.markdown(f"**Sentiment:** <span class='{sentiment_class}'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
-                    st.write(f"**Score:** {post['sentiment_score']}")
-                    st.write(f"**Author:** {post['author'] or 'Unknown'}")
-                
-                with col3:
-                    st.write(f"**Upvotes:** {post['upvotes'] or 0}")
-                    st.write(f"**Comments:** {post['comments_count'] or 0}")
-                    if post['created_at']:
-                        st.write(f"**Date:** {post['created_at'].strftime('%Y-%m-%d %H:%M')}")
+            # Create a post card
+            st.markdown(f"""
+            <div style='background: #ffffff; padding: 1.5rem; border-radius: 0.8rem; margin: 1rem 0; 
+                        border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                <h4 style='color: #1f77b4; margin-bottom: 0.5rem;'>{post['title']}</h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col1, col2, col3 = st.columns([3, 1, 1])
+            
+            with col1:
+                st.write(post['content'])
+                if post['url']:
+                    st.markdown(f"🔗 [View Original Post]({post['url']})")
+            
+            with col2:
+                # Color-coded sentiment
+                sentiment_colors = {'positive': '#28a745', 'negative': '#dc3545', 'neutral': '#6c757d'}
+                color = sentiment_colors.get(post['sentiment_label'], '#6c757d')
+                st.markdown(f"**Sentiment:** <span style='color: {color}; font-weight: bold;'>{post['sentiment_label'].title()}</span>", unsafe_allow_html=True)
+                st.write(f"**Score:** {post['sentiment_score']}")
+                st.write(f"**Author:** {post['author'] or 'Unknown'}")
+            
+            with col3:
+                st.write(f"**👍 Upvotes:** {post['upvotes'] or 0}")
+                st.write(f"**💬 Comments:** {post['comments_count'] or 0}")
+                if post['created_at']:
+                    st.write(f"**📅 Date:** {post['created_at'].strftime('%Y-%m-%d %H:%M')}")
+            
+            st.markdown("---")  # Add separator between posts
     else:
         st.info("No posts found for the selected filters.")
 

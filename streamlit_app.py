@@ -391,12 +391,7 @@ def generate_ai_summary(selected_date, posts_data, avg_sentiment):
 **Top Posts:**
 {posts_context}
 
-Provide a concise analysis (2-3 paragraphs) covering:
-1. Overall sentiment trend and key drivers
-2. Notable discussions or themes
-3. Actionable insights for Gusto
-
-Keep it professional and concise."""
+Provide a concise analysis in ONE paragraph only covering overall sentiment trend, key drivers, and one actionable insight for Gusto. Keep it professional and under 100 words."""
         
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -404,7 +399,7 @@ Keep it professional and concise."""
                 {"role": "system", "content": "You are a social media analyst for Gusto, a payroll and HR platform."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=300,
+            max_tokens=150,
             temperature=0.7
         )
         
@@ -438,18 +433,12 @@ def generate_fallback_summary(selected_date, posts_data, avg_sentiment):
     # Get most discussed topics
     top_post = max(posts_data, key=lambda x: x.get('upvotes', 0) + x.get('comments_count', 0)) if posts_data else None
     
-    summary = f"""**📊 Sentiment Analysis for {date_str}**
-    
-On this date, Gusto-related discussions showed **{sentiment_desc}** sentiment (score: {avg_sentiment:.3f}) across {total_posts} posts. {trend_desc} about Gusto's services and performance.
-
-**🔍 Key Insights:**
-- **Engagement Level:** {engagement_desc.title()} community engagement
-- **Post Volume:** {total_posts} posts analyzed"""
+    summary = f"""**📊 Analysis for {date_str}:** Gusto-related discussions showed **{sentiment_desc}** sentiment (score: {avg_sentiment:.3f}) across {total_posts} posts with {engagement_desc} community engagement. {trend_desc} about Gusto's services."""
     
     if top_post:
-        summary += f"\n- **Most Discussed:** \"{top_post['title'][:60]}...\" received {top_post.get('upvotes', 0)} upvotes"
+        summary += f" Most discussed topic: \"{top_post['title'][:50]}...\" received {top_post.get('upvotes', 0)} upvotes."
     
-    summary += f"\n\n**💡 Recommendation:** {'Continue monitoring positive momentum' if avg_sentiment > 0 else 'Investigate concerns and consider response strategy' if avg_sentiment < -0.1 else 'Maintain current engagement strategy'}"
+    summary += f" **Recommendation:** {'Continue monitoring positive momentum.' if avg_sentiment > 0 else 'Investigate concerns and consider response strategy.' if avg_sentiment < -0.1 else 'Maintain current engagement strategy.'}"
     
     return summary
 

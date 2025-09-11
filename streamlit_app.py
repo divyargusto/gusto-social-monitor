@@ -77,11 +77,13 @@ st.sidebar.header("📅 Filters")
 
 # Date range selector
 today = datetime.now().date()
-default_start = today - timedelta(days=30)
+current_year = today.year
+default_start = datetime(current_year, 1, 1).date()  # January 1st of current year
+default_end = datetime(current_year, 9, 1).date()    # September 1st of current year
 
 date_range = st.sidebar.date_input(
     "Select Date Range",
-    value=(default_start, today),
+    value=(default_start, default_end),
     max_value=today
 )
 
@@ -89,7 +91,7 @@ if len(date_range) == 2:
     start_date, end_date = date_range
 else:
     start_date = default_start
-    end_date = today
+    end_date = default_end
 
 # Platform filter (keeping for consistency, but only Reddit data)
 platform_filter = st.sidebar.selectbox(

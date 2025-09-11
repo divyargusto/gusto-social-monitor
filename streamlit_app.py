@@ -7,8 +7,6 @@ from datetime import datetime, timedelta
 import sys
 import os
 import time
-import openai
-import json
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -264,158 +262,6 @@ def load_themes_data(start_date, end_date):
         return []
 
 @st.cache_data(ttl=300)
-def load_posts_for_date(selected_date, limit=20):
-    """Load posts for a specific date for AI summary."""
-    try:
-        with get_session() as session:
-            # Convert date to datetime range
-            start_dt = datetime.combine(selected_date, datetime.min.time())
-            end_dt = datetime.combine(selected_date, datetime.max.time())
-            
-            posts = session.query(SocialMediaPost).filter(
-                SocialMediaPost.platform == 'reddit',
-                SocialMediaPost.created_at >= start_dt,
-                SocialMediaPost.created_at <= end_dt
-            ).order_by(desc(SocialMediaPost.upvotes)).limit(limit).all()
-            
-            posts_data = []
-            for post in posts:
-                posts_data.append({
-                    'title': post.title or 'No title',
-                    'content': post.content[:300] if post.content else '',
-                    'sentiment_label': post.sentiment_label,
-                    'sentiment_score': post.sentiment_score or 0,
-                    'upvotes': post.upvotes or 0,
-                    'comments_count': post.comments_count or 0,
-                    'author': post.author
-                })
-            
-            return posts_data
-            
-    except Exception as e:
-        st.error(f"Error loading posts for date: {e}")
-        return []
-
-@st.cache_data(ttl=3600)  # Cache for 1 hour
-def generate_ai_summary(selected_date, posts_data, trends_data_point):
-    """Generate AI summary for a specific date's sentiment trends."""
-    try:
-        if not posts_data:
-            return "No posts found for this date to analyze."
-        
-        # Prepare context for AI
-        date_str = selected_date.strftime('%B %d, %Y')
-        total_posts = len(posts_data)
-        sentiment_counts = {'positive': 0, 'negative': 0, 'neutral': 0}
-        
-        for post in posts_data:
-            sentiment = post.get('sentiment_label', 'neutral')
-            if sentiment in sentiment_counts:
-                sentiment_counts[sentiment] += 1
-        
-        # Get top posts by engagement
-        top_posts = sorted(posts_data, key=lambda x: x.get('upvotes', 0) + x.get('comments_count', 0), reverse=True)[:5]
-        
-        # Prepare prompt for AI
-        posts_context = ""
-        for i, post in enumerate(top_posts, 1):
-            posts_context += f"{i}. Title: {post['title']}\n"
-            posts_context += f"   Content: {post['content'][:150]}...\n"
-            posts_context += f"   Sentiment: {post['sentiment_label']} ({post['sentiment_score']:.2f})\n"
-            posts_context += f"   Engagement: {post['upvotes']} upvotes, {post['comments_count']} comments\n\n"
-        
-        prompt = f"""
-        Analyze the Gusto-related Reddit sentiment for {date_str}:
-
-        **Data Summary:**
-        - Total posts: {total_posts}
-        - Sentiment breakdown: {sentiment_counts['positive']} positive, {sentiment_counts['negative']} negative, {sentiment_counts['neutral']} neutral
-        - Average sentiment score: {trends_data_point.get('avg_sentiment', 0):.3f}
-
-        **Top Posts by Engagement:**
-        {posts_context}
-
-        Please provide a concise analysis (2-3 paragraphs) covering:
-        1. Overall sentiment trend and what drove it
-        2. Key themes or topics that emerged
-        3. Notable posts or discussions that influenced sentiment
-        4. Any actionable insights for Gusto
-
-        Keep the tone professional but accessible.
-        """
-        
-        # Use OpenAI API (you'll need to set up API key)
-        try:
-            # Check if OpenAI API key is available
-            openai_api_key = os.getenv('OPENAI_API_KEY')
-            if not openai_api_key:
-                return "🤖 AI Summary requires OpenAI API key. Please set OPENAI_API_KEY environment variable."
-            
-            openai.api_key = openai_api_key
-            
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a social media analyst specializing in sentiment analysis for Gusto, a payroll and HR platform."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=400,
-                temperature=0.7
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as api_error:
-            # Fallback to rule-based summary
-            return generate_fallback_summary(selected_date, posts_data, sentiment_counts, trends_data_point)
-            
-    except Exception as e:
-        return f"Error generating AI summary: {str(e)}"
-
-def generate_fallback_summary(selected_date, posts_data, sentiment_counts, trends_data_point):
-    """Generate a rule-based summary when AI is not available."""
-    date_str = selected_date.strftime('%B %d, %Y')
-    total_posts = len(posts_data)
-    avg_sentiment = trends_data_point.get('avg_sentiment', 0)
-    
-    # Determine overall sentiment
-    if avg_sentiment > 0.1:
-        sentiment_desc = "positive"
-        trend_desc = "Users expressed generally favorable views"
-    elif avg_sentiment < -0.1:
-        sentiment_desc = "negative"
-        trend_desc = "Users expressed concerns or criticism"
-    else:
-        sentiment_desc = "neutral"
-        trend_desc = "Users maintained a balanced perspective"
-    
-    # Analyze engagement
-    total_engagement = sum(post.get('upvotes', 0) + post.get('comments_count', 0) for post in posts_data)
-    avg_engagement = total_engagement / total_posts if total_posts > 0 else 0
-    
-    engagement_desc = "high" if avg_engagement > 10 else "moderate" if avg_engagement > 5 else "low"
-    
-    # Get most discussed topics (simplified)
-    top_post = max(posts_data, key=lambda x: x.get('upvotes', 0) + x.get('comments_count', 0)) if posts_data else None
-    
-    summary = f"""
-    **📊 Sentiment Analysis for {date_str}**
-    
-    On this date, Gusto-related discussions showed **{sentiment_desc}** sentiment (score: {avg_sentiment:.3f}) across {total_posts} posts. {trend_desc} about Gusto's services and performance.
-    
-    **🔍 Key Insights:**
-    - **Engagement Level:** {engagement_desc.title()} community engagement
-    - **Sentiment Distribution:** {sentiment_counts['positive']} positive, {sentiment_counts['negative']} negative, {sentiment_counts['neutral']} neutral posts
-    """
-    
-    if top_post:
-        summary += f"\n- **Most Discussed:** \"{top_post['title'][:80]}...\" received {top_post.get('upvotes', 0)} upvotes and {top_post.get('comments_count', 0)} comments"
-    
-    summary += f"\n\n**💡 Recommendation:** {'Continue monitoring positive momentum' if avg_sentiment > 0 else 'Investigate concerns and consider response strategy' if avg_sentiment < -0.1 else 'Maintain current engagement strategy'}"
-    
-    return summary
-
-@st.cache_data(ttl=300)
 def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
     """Load recent posts data."""
     try:
@@ -532,108 +378,19 @@ if overview_data:
         st.subheader("Sentiment Trends")
         
         if trends_data:
-            # Create interactive trends chart
+            # Create trends chart
             df_trends = pd.DataFrame(trends_data)
             df_trends['date'] = pd.to_datetime(df_trends['date'])
             
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_trends['date'],
-                y=df_trends['avg_sentiment'],
-                mode='lines+markers',
-                name='Average Sentiment',
-                line=dict(color='#1f77b4', width=3),
-                marker=dict(size=8, color='#1f77b4'),
-                hovertemplate='<b>%{x|%B %d, %Y}</b><br>' +
-                             'Avg Sentiment: %{y:.3f}<br>' +
-                             'Posts: %{customdata}<br>' +
-                             '<i>Click to get AI insights!</i><extra></extra>',
-                customdata=df_trends['post_count']
-            ))
-            
-            fig.update_layout(
-                title='Average Sentiment Over Time (Click points for AI analysis)',
-                xaxis_title='Date',
-                yaxis_title='Average Sentiment',
-                yaxis_range=[-1, 1],
-                height=400,
-                hovermode='x unified'
+            fig = px.line(
+                df_trends,
+                x='date',
+                y='avg_sentiment',
+                title='Average Sentiment Over Time',
+                labels={'avg_sentiment': 'Average Sentiment', 'date': 'Date'}
             )
-            
-            # Display the chart and capture click events
-            clicked_point = st.plotly_chart(fig, use_container_width=True, key="sentiment_trends_chart")
-            
-            # Add date selector for AI summary
-            st.markdown("### 🤖 AI Trend Analysis")
-            
-            # Create columns for date selection and summary
-            col_date, col_summary = st.columns([1, 2])
-            
-            with col_date:
-                # Date selector for AI analysis
-                available_dates = [pd.to_datetime(item['date']).date() for item in trends_data]
-                
-                if available_dates:
-                    selected_date = st.selectbox(
-                        "📅 Select date for AI analysis:",
-                        available_dates,
-                        format_func=lambda x: x.strftime('%B %d, %Y'),
-                        key="ai_analysis_date"
-                    )
-                    
-                    # Generate AI summary button
-                    if st.button("🚀 Generate AI Summary", key="generate_summary"):
-                        st.session_state.show_ai_summary = True
-                        st.session_state.selected_analysis_date = selected_date
-            
-            with col_summary:
-                # Show AI summary if requested
-                if hasattr(st.session_state, 'show_ai_summary') and st.session_state.show_ai_summary:
-                    analysis_date = st.session_state.get('selected_analysis_date')
-                    if analysis_date:
-                        with st.spinner('🤖 Analyzing sentiment trends and generating insights...'):
-                            # Find the corresponding trends data point
-                            trends_point = next(
-                                (item for item in trends_data if pd.to_datetime(item['date']).date() == analysis_date), 
-                                None
-                            )
-                            
-                            if trends_point:
-                                # Load posts for the selected date
-                                posts_for_date = load_posts_for_date(analysis_date)
-                                
-                                if posts_for_date:
-                                    # Generate AI summary
-                                    ai_summary = generate_ai_summary(analysis_date, posts_for_date, trends_point)
-                                    
-                                    # Display the summary in a nice container
-                                    st.markdown("""
-                                    <div style='background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); 
-                                                padding: 1.5rem; border-radius: 0.8rem; margin: 1rem 0;
-                                                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);'>
-                                    """, unsafe_allow_html=True)
-                                    
-                                    st.markdown(ai_summary)
-                                    
-                                    st.markdown("</div>", unsafe_allow_html=True)
-                                    
-                                    # Add some quick stats
-                                    st.markdown("---")
-                                    col_stat1, col_stat2, col_stat3 = st.columns(3)
-                                    with col_stat1:
-                                        st.metric("📊 Posts Analyzed", len(posts_for_date))
-                                    with col_stat2:
-                                        st.metric("📈 Avg Sentiment", f"{trends_point['avg_sentiment']:.3f}")
-                                    with col_stat3:
-                                        total_engagement = sum(p.get('upvotes', 0) + p.get('comments_count', 0) for p in posts_for_date)
-                                        st.metric("💬 Total Engagement", total_engagement)
-                                else:
-                                    st.info(f"📭 No posts found for {analysis_date.strftime('%B %d, %Y')} to analyze.")
-                            else:
-                                st.error("Could not find trend data for the selected date.")
-                else:
-                    st.info("👆 Select a date above and click 'Generate AI Summary' to get detailed insights about sentiment trends for that specific day.")
-            
+            fig.update_layout(yaxis_range=[-1, 1])
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No trends data available for the selected date range.")
 

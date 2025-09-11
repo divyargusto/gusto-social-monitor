@@ -15,7 +15,7 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
 # Add the project root to the Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.getcwd())
 
 # Import your existing database models and functions
 from backend.database.database import init_database, get_session

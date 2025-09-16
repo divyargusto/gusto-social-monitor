@@ -121,7 +121,7 @@ if auto_refresh:
     st.rerun()
 
 # Data loading functions
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=60)  # Cache for 1 minute to help with debugging
 def load_overview_data(start_date, end_date):
     """Load overview statistics."""
     try:
@@ -179,7 +179,7 @@ def load_overview_data(start_date, end_date):
         st.error(f"Error loading overview data: {e}")
         return None
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_sentiment_trends(start_date, end_date):
     """Load sentiment trends over time."""
     try:
@@ -220,7 +220,7 @@ def load_sentiment_trends(start_date, end_date):
         st.error(f"Error loading sentiment trends: {e}")
         return []
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_themes_data(start_date, end_date):
     """Load themes analysis data."""
     try:
@@ -282,7 +282,7 @@ def load_themes_data(start_date, end_date):
         st.error(f"Error loading themes data: {e}")
         return []
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
     """Load recent posts data."""
     try:
@@ -322,7 +322,7 @@ def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
         st.error(f"Error loading posts data: {e}")
         return []
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_posts_for_date(selected_date, limit=20):
     """Load posts for a specific date for AI summary."""
     try:
@@ -457,7 +457,7 @@ def generate_fallback_summary(selected_date, posts_data, avg_sentiment):
     
     return summary
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_posts_by_theme_sentiment(theme_name, sentiment_filter, start_date, end_date, limit=20):
     """Load posts filtered by theme and sentiment."""
     try:

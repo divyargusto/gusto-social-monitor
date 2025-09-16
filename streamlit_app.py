@@ -75,11 +75,16 @@ st.markdown('<h1 class="main-header">🚀 Gusto Social Media Monitor</h1>', unsa
 # Sidebar for filters
 st.sidebar.header("📅 Filters")
 
+# Add cache clear button for debugging
+if st.sidebar.button("🔄 Clear Cache & Refresh Data"):
+    st.cache_data.clear()
+    st.rerun()
+
 # Date range selector
 today = datetime.now().date()
 current_year = today.year
 default_start = datetime(current_year, 1, 1).date()  # January 1st of current year
-default_end = datetime(current_year, 9, 1).date()    # September 1st of current year
+default_end = today  # Current date to include all available data including August/September
 
 date_range = st.sidebar.date_input(
     "Select Date Range",
@@ -121,6 +126,9 @@ def load_overview_data(start_date, end_date):
     """Load overview statistics."""
     try:
         with get_session() as session:
+            # Debug: Check total posts in database
+            total_posts_db = session.query(SocialMediaPost).count()
+            
             # Base query - Reddit only
             base_query = session.query(SocialMediaPost).filter(SocialMediaPost.platform == 'reddit')
             
@@ -159,7 +167,12 @@ def load_overview_data(start_date, end_date):
                 'total_posts': total_posts,
                 'sentiment_breakdown': sentiment_breakdown,
                 'avg_sentiment_score': round(avg_sentiment, 3),
-                'recent_posts_7_days': recent_posts
+                'recent_posts_7_days': recent_posts,
+                'debug_info': {
+                    'total_posts_db': total_posts_db,
+                    'filtered_posts': total_posts,
+                    'date_range': f"{start_date} to {end_date}"
+                }
             }
             
     except Exception as e:
@@ -502,6 +515,11 @@ trends_data = load_sentiment_trends(start_date, end_date)
 themes_data = load_themes_data(start_date, end_date)
 
 if overview_data:
+    # Debug information
+    if 'debug_info' in overview_data:
+        debug = overview_data['debug_info']
+        st.info(f"🔍 Debug Info: {debug['total_posts_db']} total posts in DB, {debug['filtered_posts']} posts in date range ({debug['date_range']})")
+    
     # Overview metrics row
     st.header("📊 Overview")
     

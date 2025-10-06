@@ -76,9 +76,9 @@ async def main():
     print(f"🔍 Using {len(keywords)} comprehensive keyword searches")
     print(f"📈 Searching {len(reddit_collector.target_subreddits) if hasattr(reddit_collector, 'target_subreddits') else '60+'} subreddits")
     
-    # Extended time period for maximum data
-    days_back = 180  # 6 months instead of 3 for even more data
-    print(f"📅 Extended search: {days_back} days (6 months)")
+    # Focused time period for better search results
+    days_back = 90  # 3 months for more reliable results
+    print(f"📅 Search period: {days_back} days (3 months)")
     
     # Collect data
     reddit_data = await reddit_collector.collect_data(keywords, days_back=days_back)

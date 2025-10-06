@@ -289,49 +289,11 @@ class RedditCollector:
         
         all_results = []
         
-        # Expanded subreddits for Gusto mentions - much more comprehensive!
+        # Focused subreddits - only the 3 most relevant for Gusto mentions
         target_subreddits = [
-            # Business & Entrepreneurship (primary targets)
-            'smallbusiness', 'entrepreneur', 'startups', 'business', 'solopreneur',
-            'Entrepreneur', 'SmallBusiness', 'startups', 'BusinessIntelligence',
-            
-            # HR & Payroll (high relevance)
-            'payroll', 'humanresources', 'HR', 'AskHR', 'peopleops', 
-            'recruiting', 'HumanResources', 'employment',
-            
-            # Accounting & Finance
-            'accounting', 'bookkeeping', 'QuickBooks', 'personalfinance', 
-            'financialindependence', 'taxpros', 'tax', 'Accounting',
-            'smallbusinessfinance', 'BusinessFinance',
-            
-            # Software & SaaS
-            'SaaS', 'software', 'productivity', 'apps', 'techsupport',
-            'softwarerecommendations', 'workflow', 'automation',
-            'EntrepreneurRideAlong', 'saas',
-            
-            # Remote Work & Freelancing
-            'freelance', 'remotework', 'digitalnomad', 'WorkOnline',
-            'freelancing', 'gig', 'sidehustle', 'Fiverr', 'Upwork',
-            
-            # Reviews & Recommendations  
-            'reviews', 'software', 'apps', 'ProductHunt', 'toolbox',
-            'businesstools', 'softwarereview',
-            
-            # Specific Industries
-            'restaurantowners', 'Construction', 'retail', 'ecommerce',
-            'nonprofits', 'consulting', 'marketing', 'sales',
-            
-            # General Tech & Business
-            'technology', 'techsupport', 'AskBusiness', 'Business_Ideas',
-            'growmybusiness', 'marketing', 'sales', 'customerservice',
-            
-            # Startup & Funding
-            'startups', 'ycombinator', 'venturecapital', 'funding',
-            'entrepreneur', 'StartupShowcase',
-            
-            # Specific Software Categories
-            'CRM', 'ERP', 'analytics', 'CloudComputing', 'MSP',
-            'sysadmin', 'ITCareerQuestions'
+            'smallbusiness',
+            'Entrepreneurship',
+            'Payroll'
         ]
         
         for subreddit_name in target_subreddits:

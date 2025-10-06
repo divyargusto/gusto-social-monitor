@@ -284,7 +284,7 @@ def load_themes_data(start_date, end_date):
 
 @st.cache_data(ttl=60)
 def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
-    """Load recent posts data."""
+    """Load posts data sorted by engagement (upvotes + comments)."""
     try:
         with get_session() as session:
             start_dt = datetime.combine(start_date, datetime.min.time())
@@ -300,7 +300,10 @@ def load_posts_data(start_date, end_date, sentiment_filter_val="All", limit=50):
             if sentiment_filter_val != "All":
                 query = query.filter(SocialMediaPost.sentiment_label == sentiment_filter_val)
             
-            posts = query.order_by(desc(SocialMediaPost.created_at)).limit(limit).all()
+            # Sort by engagement (upvotes + comments) descending
+            posts = query.order_by(
+                desc((SocialMediaPost.upvotes + SocialMediaPost.comments_count))
+            ).limit(limit).all()
             
             posts_data = []
             for post in posts:
@@ -904,40 +907,45 @@ if overview_data:
             st.info("👆 Click any colored button above to filter posts by theme and sentiment!")
 
     # Recent posts section
-    st.header("📝 Recent Posts")
+    st.header("📝 Posts (Sorted by Engagement)")
     
     # Use session state filter if available, otherwise use sidebar filter
     active_sentiment_filter = st.session_state.get('sentiment_filter', sentiment_filter)
     if active_sentiment_filter != sentiment_filter:
         st.info(f"🔍 Filtered by: **{active_sentiment_filter}** sentiment (click 'All' button above to reset)")
     
-    posts_data = load_posts_data(start_date, end_date, active_sentiment_filter)
+    posts_data = load_posts_data(start_date, end_date, active_sentiment_filter, limit=1000)  # Get all posts
     
     if posts_data:
-        for i, post in enumerate(posts_data[:15]):  # Show top 15 posts
-            col1, col2, col3 = st.columns([4, 1, 1])
+        st.write(f"**Showing {len(posts_data)} posts**")
+        
+        for i, post in enumerate(posts_data):  # Show ALL posts
+            col1, col2, col3 = st.columns([2.5, 1, 0.7])  # Narrower columns: 2.5, 1, 0.7
             
             with col1:
-                # Clean title and content
-                st.markdown(f"**{post['title']}**")
-                st.write(post['content'][:200] + "..." if len(post['content']) > 200 else post['content'])
+                # Compact title and content
+                st.markdown(f"**{post['title'][:80]}{'...' if len(post['title']) > 80 else ''}**")
+                # Shorter content preview
+                if post['content']:
+                    content_preview = post['content'][:150] + "..." if len(post['content']) > 150 else post['content']
+                    st.caption(content_preview)
                 if post['url']:
-                    st.markdown(f"[🔗 View Post]({post['url']})")
+                    st.markdown(f"[🔗 View]({post['url']})")
             
             with col2:
                 # Compact sentiment info
                 sentiment_emoji = {'positive': '🟢', 'negative': '🔴', 'neutral': '⚪'}
                 emoji = sentiment_emoji.get(post['sentiment_label'], '⚪')
                 st.write(f"{emoji} {post['sentiment_label'].title()}")
-                st.write(f"Score: {post['sentiment_score']}")
+                st.caption(f"Score: {post['sentiment_score']:.2f}")
             
             with col3:
-                # Compact stats
-                st.write(f"👍 {post['upvotes'] or 0}")
-                st.write(f"💬 {post['comments_count'] or 0}")
+                # Very compact stats
+                st.caption(f"👍 {post['upvotes'] or 0}")
+                st.caption(f"💬 {post['comments_count'] or 0}")
                 if post['created_at']:
-                    date_str = post['created_at'].strftime('%m/%d')
-                    st.write(f"📅 {date_str}")
+                    date_str = post['created_at'].strftime('%m/%d/%y')
+                    st.caption(f"📅 {date_str}")
             
             st.divider()  # Clean separator
     else:

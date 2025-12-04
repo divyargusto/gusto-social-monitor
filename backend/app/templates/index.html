@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gusto Reddit Sentiment Monitor - Dashboard</title>
+    
+    <!-- CSS Dependencies -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            font-weight: 600;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .metric-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-label {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+        
+        .sentiment-positive { color: #28a745; }
+        .sentiment-negative { color: #dc3545; }
+        .sentiment-neutral { color: #6c757d; }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #6c757d;
+        }
+        
+        .theme-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin: 0.2rem;
+            display: inline-block;
+        }
+        
+        .post-item {
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: white;
+            border-radius: 0 10px 10px 0;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fab fa-reddit me-2"></i>
+                Gusto Reddit Sentiment Monitor
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#overview">Overview</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#sentiment">Sentiment</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#themes">Themes</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#posts">Posts</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <!-- Overview Section -->
+        <section id="overview" class="mb-5">
+            <h2 class="mb-4"><i class="fas fa-tachometer-alt me-2"></i>Overview</h2>
+            
+            <div class="row" id="overview-metrics">
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                    <p>Loading overview data...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reddit Data Collection Section -->
+        <section id="reddit-management" class="mb-5">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fab fa-reddit me-2"></i>Reddit Data Sources</span>
+                    <button class="btn btn-primary btn-sm" onclick="checkRedditData()">
+                        <i class="fas fa-refresh me-2"></i>Check Data
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-users me-2"></i>Target Subreddits</h6>
+                            <ul class="list-unstyled mb-3">
+                                <li><i class="fas fa-circle text-success me-2" style="font-size: 0.5rem;"></i>r/smallbusiness</li>
+                                <li><i class="fas fa-circle text-success me-2" style="font-size: 0.5rem;"></i>r/Entrepreneurship</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-search me-2"></i>Search Focus</h6>
+                            <p class="text-muted mb-0">Monitoring Reddit discussions about payroll, HR software, and small business tools with focus on Gusto mentions.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sentiment Analysis Section -->
+        <section id="sentiment" class="mb-5">
+            <div class="row">
+                <div class="col-lg-6 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-heart me-2"></i>Sentiment Distribution
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="sentimentChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-chart-line me-2"></i>Sentiment Trends
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="sentimentTrendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Themes Section -->
+        <section id="themes" class="mb-5">
+            <div class="row">
+                <div class="col-lg-8 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-tags me-2"></i>Topic Sentiment Analysis (Reddit)
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="themesChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-4 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-users me-2"></i>Competitor Mentions (Reddit)
+                        </div>
+                        <div class="card-body" id="competitors-list">
+                            <div class="loading">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                Loading competitors...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                        </div>
+        </section>
+
+        <!-- Competitive Analysis Section -->
+        <section id="competitive-analysis" class="mb-5">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-balance-scale me-2"></i>Competitive Sentiment Analysis
+                </div>
+                <div class="card-body">
+                    <!-- Filters -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="competitorSelect" class="form-label">Select Competitor:</label>
+                            <select id="competitorSelect" class="form-select">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="themeSelect" class="form-label">Select Theme:</label>
+                            <select id="themeSelect" class="form-select">
+                                <option value="payroll_processing">Payroll Processing</option>
+                                <option value="pricing_cost">Pricing Cost</option>
+                                <option value="customer_service">Customer Service</option>
+                                <option value="user_experience">User Experience</option>
+                                <option value="features_functionality">Features Functionality</option>
+                                <option value="performance_reliability">Performance Reliability</option>
+                                <option value="hr_benefits">HR Benefits</option>
+                                <option value="integration_compatibility">Integration Compatibility</option>
+                                <option value="compliance_taxes">Compliance Taxes</option>
+                                <option value="comparison_alternatives">Comparison Alternatives</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart Container -->
+                    <div class="chart-container" style="position: relative; height: 400px;">
+                        <canvas id="competitiveChart"></canvas>
+                    </div>
+                    
+                    <!-- Analysis Summary -->
+                    <div id="competitiveSummary" class="mt-4" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Gusto Performance</h6>
+                                <div id="gustoSummary"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 id="competitorSummaryTitle">Competitor Performance</h6>
+                                <div id="competitorSummaryContent"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Competitive Posts Display -->
+                    <div id="competitivePosts" class="mt-4" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6>Recent Reddit Posts Comparison</h6>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary me-2" onclick="filterCompetitivePosts('all')">All</button>
+                                <button class="btn btn-sm btn-outline-success me-2" onclick="filterCompetitivePosts('positive')">Positive</button>
+                                <button class="btn btn-sm btn-outline-secondary me-2" onclick="filterCompetitivePosts('neutral')">Neutral</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="filterCompetitivePosts('negative')">Negative</button>
+                            </div>
+                        </div>
+                        <div id="competitivePostsContent">
+                            <!-- Posts will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filtered Theme Posts Section -->
+        <section id="theme-posts" class="mb-5" style="display: none;">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-filter me-2"></i>
+                        <span id="theme-posts-title">Filtered Posts</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hideThemePosts()">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="theme-posts-content">
+                        <!-- Posts will be loaded here -->
+                    </div>
+                    <div id="theme-posts-pagination" class="mt-3">
+                        <!-- Pagination will be added here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Recent Posts Section -->
+        <section id="posts" class="mb-5">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-comments me-2"></i>Recent Posts</span>
+                    <div>
+                        <select id="platformFilter" class="form-select form-select-sm d-inline-block" style="width: auto;">
+                            <option value="">All Platforms</option>
+                            <option value="reddit">Reddit</option>
+                            <option value="youtube">YouTube</option>
+                        </select>
+                        <select id="sentimentFilter" class="form-select form-select-sm d-inline-block ms-2" style="width: auto;">
+                            <option value="">All Sentiments</option>
+                            <option value="positive">Positive</option>
+                            <option value="negative">Negative</option>
+                            <option value="neutral">Neutral</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body" id="posts-container">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Loading recent posts...
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- JavaScript Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        // Global chart configurations
+        Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+        Chart.defaults.color = '#6c757d';
+
+        // API base URL
+        const API_BASE = '/api';
+
+        // Load posts by theme and sentiment
+        async function loadThemePosts(theme, sentiment) {
+            try {
+                // Show loading
+                document.getElementById('theme-posts').style.display = 'block';
+                document.getElementById('theme-posts-title').textContent = `${sentiment.charAt(0).toUpperCase() + sentiment.slice(1)} Posts: ${theme}`;
+                document.getElementById('theme-posts-content').innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading posts...</div>';
+                
+                // Scroll to the section
+                document.getElementById('theme-posts').scrollIntoView({ behavior: 'smooth' });
+                
+                const response = await axios.get(`${API_BASE}/posts-by-theme`, {
+                    params: { theme, sentiment, per_page: 10 }
+                });
+                
+                const data = response.data;
+                displayThemePosts(data);
+                
+            } catch (error) {
+                console.error('Error loading theme posts:', error);
+                document.getElementById('theme-posts-content').innerHTML = '<div class="alert alert-danger">Error loading posts. Please try again.</div>';
+            }
+        }
+
+        // Display filtered posts
+        function displayThemePosts(data) {
+            const container = document.getElementById('theme-posts-content');
+            
+            if (data.posts.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No posts found for this theme and sentiment combination.</div>';
+                return;
+            }
+            
+            let html = '';
+            data.posts.forEach(post => {
+                const sentimentColor = post.sentiment_label === 'positive' ? 'success' : 
+                                      post.sentiment_label === 'negative' ? 'danger' : 'secondary';
+                const sentimentIcon = post.sentiment_label === 'positive' ? 'fa-smile' : 
+                                     post.sentiment_label === 'negative' ? 'fa-frown' : 'fa-meh';
+                
+                html += `
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-1">
+                                    <a href="${post.url}" target="_blank" class="text-decoration-none">
+                                        ${post.title}
+                                    </a>
+                                </h6>
+                                <span class="badge bg-${sentimentColor}">
+                                    <i class="fas ${sentimentIcon} me-1"></i>
+                                    ${post.sentiment_label}
+                                </span>
+                            </div>
+                            <p class="card-text text-muted small mb-2">${post.content}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="text-muted small">
+                                    <i class="fab fa-reddit me-1"></i>
+                                    r/${post.subreddit} • u/${post.author}
+                                    ${post.upvotes ? `• <i class="fas fa-arrow-up"></i> ${post.upvotes}` : ''}
+                                </div>
+                                <small class="text-muted">
+                                    ${new Date(post.collected_at).toLocaleDateString()}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            
+            // Add pagination info
+            const paginationContainer = document.getElementById('theme-posts-pagination');
+            if (data.pagination.total > data.pagination.per_page) {
+                paginationContainer.innerHTML = `
+                    <div class="text-center text-muted">
+                        Showing ${data.posts.length} of ${data.pagination.total} posts
+                        ${data.pagination.pages > 1 ? `(Page ${data.pagination.page} of ${data.pagination.pages})` : ''}
+                    </div>
+                `;
+            } else {
+                paginationContainer.innerHTML = '';
+            }
+        }
+
+        // Hide theme posts section
+        function hideThemePosts() {
+            document.getElementById('theme-posts').style.display = 'none';
+        }
+
+        // Load available competitors
+        async function loadAvailableCompetitors() {
+            try {
+                const response = await axios.get(`${API_BASE}/available-competitors`);
+                const data = response.data;
+                
+                const select = document.getElementById('competitorSelect');
+                select.innerHTML = '<option value="">Select a competitor...</option>';
+                
+                data.competitors.forEach(competitor => {
+                    const option = document.createElement('option');
+                    option.value = competitor.name;
+                    option.textContent = `${competitor.display_name} (${competitor.post_count} posts)`;
+                    select.appendChild(option);
+                });
+                
+            } catch (error) {
+                console.error('Error loading competitors:', error);
+                document.getElementById('competitorSelect').innerHTML = '<option value="">Error loading competitors</option>';
+            }
+        }
+
+        // Load competitive analysis
+        async function loadCompetitiveAnalysis() {
+            const competitor = document.getElementById('competitorSelect').value;
+            const theme = document.getElementById('themeSelect').value;
+            
+            if (!competitor || !theme) {
+                // Clear chart if no selection
+                const ctx = document.getElementById('competitiveChart').getContext('2d');
+                if (window.competitiveChart) {
+                    window.competitiveChart.destroy();
+                }
+                document.getElementById('competitiveSummary').style.display = 'none';
+                return;
+            }
+            
+            try {
+                const response = await axios.get(`${API_BASE}/competitor-analysis`, {
+                    params: { competitor, theme }
+                });
+                const data = response.data;
+                
+                displayCompetitiveChart(data);
+                displayCompetitiveSummary(data);
+                
+            } catch (error) {
+                console.error('Error loading competitive analysis:', error);
+            }
+        }
+
+        // Display competitive analysis chart
+        function displayCompetitiveChart(data) {
+            const ctx = document.getElementById('competitiveChart').getContext('2d');
+            
+            // Destroy existing chart
+            if (window.competitiveChart) {
+                window.competitiveChart.destroy();
+            }
+            
+            const gustoData = data.gusto_sentiment;
+            const competitorData = data.competitor_sentiment;
+            
+            window.competitiveChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative'],
+                    datasets: [{
+                        label: 'Gusto',
+                        data: [gustoData.positive, gustoData.neutral, gustoData.negative],
+                        backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(156, 163, 175, 0.8)', 'rgba(239, 68, 68, 0.8)'],
+                        borderColor: ['rgb(34, 197, 94)', 'rgb(156, 163, 175)', 'rgb(239, 68, 68)'],
+                        borderWidth: 1
+                    }, {
+                        label: data.comparison.competitor,
+                        data: [competitorData.positive, competitorData.neutral, competitorData.negative],
+                        backgroundColor: ['rgba(34, 197, 94, 0.5)', 'rgba(156, 163, 175, 0.5)', 'rgba(239, 68, 68, 0.5)'],
+                        borderColor: ['rgb(34, 197, 94)', 'rgb(156, 163, 175)', 'rgb(239, 68, 68)'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: false
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Sentiment Comparison: Gusto vs ${data.comparison.competitor} - ${data.comparison.theme}`,
+                            font: {
+                                size: 16
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return `${context[0].label} Sentiment`;
+                                },
+                                afterBody: function(context) {
+                                    return [`Total posts analyzed: ${data.comparison.total_posts}`];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Display competitive analysis summary
+        function displayCompetitiveSummary(data) {
+            const gustoData = data.gusto_sentiment;
+            const competitorData = data.competitor_sentiment;
+            
+            // Calculate percentages
+            const gustoTotal = gustoData.total || 1;
+            const competitorTotal = competitorData.total || 1;
+            
+            const gustoPositivePercent = Math.round((gustoData.positive / gustoTotal) * 100);
+            const gustoNegativePercent = Math.round((gustoData.negative / gustoTotal) * 100);
+            
+            const competitorPositivePercent = Math.round((competitorData.positive / competitorTotal) * 100);
+            const competitorNegativePercent = Math.round((competitorData.negative / competitorTotal) * 100);
+            
+            // Gusto summary
+            document.getElementById('gustoSummary').innerHTML = `
+                <div class="mb-2">
+                    <span class="badge bg-success">${gustoData.positive} Positive (${gustoPositivePercent}%)</span>
+                    <span class="badge bg-secondary ms-1">${gustoData.neutral} Neutral</span>
+                    <span class="badge bg-danger ms-1">${gustoData.negative} Negative (${gustoNegativePercent}%)</span>
+                </div>
+                <small class="text-muted">Total mentions: ${gustoData.total}</small>
+            `;
+            
+            // Competitor summary
+            document.getElementById('competitorSummaryTitle').textContent = `${data.comparison.competitor} Performance`;
+            document.getElementById('competitorSummaryContent').innerHTML = `
+                <div class="mb-2">
+                    <span class="badge bg-success">${competitorData.positive} Positive (${competitorPositivePercent}%)</span>
+                    <span class="badge bg-secondary ms-1">${competitorData.neutral} Neutral</span>
+                    <span class="badge bg-danger ms-1">${competitorData.negative} Negative (${competitorNegativePercent}%)</span>
+                </div>
+                <small class="text-muted">Total mentions: ${competitorData.total}</small>
+            `;
+            
+            document.getElementById('competitiveSummary').style.display = 'block';
+            
+            // Show and populate competitive posts
+            displayCompetitivePosts(data.analyzed_posts);
+        }
+        
+        // Display competitive posts
+        function displayCompetitivePosts(posts) {
+            const container = document.getElementById('competitivePostsContent');
+            
+            if (!posts || posts.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No posts found for this comparison.</div>';
+                document.getElementById('competitivePosts').style.display = 'block';
+                return;
+            }
+            
+            let html = '';
+            posts.forEach(post => {
+                const isGusto = post.type === 'gusto';
+                const sentimentClass = post.sentiment === 'positive' ? 'sentiment-positive' : 
+                                     post.sentiment === 'negative' ? 'sentiment-negative' : 'sentiment-neutral';
+                const typeClass = isGusto ? 'border-primary' : 'border-warning';
+                const typeLabel = isGusto ? 'Gusto' : 'Competitor';
+                const typeBadgeClass = isGusto ? 'bg-primary' : 'bg-warning';
+                
+                html += `
+                    <div class="post-item ${typeClass} mb-3" data-sentiment="${post.sentiment}" data-type="${post.type}">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="mb-1">${post.title || 'No title'}</h6>
+                            <div>
+                                <span class="badge ${typeBadgeClass} me-2">${typeLabel}</span>
+                                <small class="text-muted">Reddit</small>
+                            </div>
+                        </div>
+                        <p class="mb-2">${post.content}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="${sentimentClass} fw-bold">${post.sentiment}</span>
+                                <small class="text-muted ms-2">${post.sentiment_score}</small>
+                            </div>
+                            <small class="text-muted">
+                                ${new Date(post.collected_at).toLocaleDateString()}
+                                ${post.url ? `• <a href="${post.url}" target="_blank">View</a>` : ''}
+                            </small>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            document.getElementById('competitivePosts').style.display = 'block';
+        }
+        
+        // Filter competitive posts by sentiment
+        function filterCompetitivePosts(sentiment) {
+            const posts = document.querySelectorAll('#competitivePostsContent .post-item');
+            
+            posts.forEach(post => {
+                if (sentiment === 'all' || post.getAttribute('data-sentiment') === sentiment) {
+                    post.style.display = 'block';
+                } else {
+                    post.style.display = 'none';
+                }
+            });
+            
+            // Update button states
+            document.querySelectorAll('#competitivePosts button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadOverview();
+            loadSentimentData();
+            loadThemesData();
+            loadCompetitors();
+            loadRecentPosts();
+            loadAvailableCompetitors();
+            
+            // Add event listeners for competitive analysis
+            document.getElementById('competitorSelect').addEventListener('change', loadCompetitiveAnalysis);
+            document.getElementById('themeSelect').addEventListener('change', loadCompetitiveAnalysis);
+            
+            // Setup filters
+            document.getElementById('platformFilter').addEventListener('change', loadRecentPosts);
+            document.getElementById('sentimentFilter').addEventListener('change', loadRecentPosts);
+            
+            // Load YouTube status
+            loadYouTubeStatus();
+        });
+
+        // Load overview metrics
+        async function loadOverview() {
+            try {
+                const response = await axios.get(`${API_BASE}/overview`);
+                const data = response.data;
+                
+                const metricsHtml = `
+                    <div class="col-md-3 mb-4">
+                        <div class="card metric-card">
+                            <div class="metric-number">${data.total_posts}</div>
+                            <div class="metric-label">Reddit Posts</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <div class="card metric-card">
+                            <div class="metric-number">${data.avg_sentiment_score.toFixed(2)}</div>
+                            <div class="metric-label">Avg Sentiment</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <div class="card metric-card">
+                            <div class="metric-number">${data.platforms.reddit || 0}</div>
+                            <div class="metric-label">Reddit Posts</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <div class="card metric-card">
+                            <div class="metric-number">${data.recent_posts_7_days}</div>
+                            <div class="metric-label">Posts (7 days)</div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('overview-metrics').innerHTML = metricsHtml;
+            } catch (error) {
+                console.error('Error loading overview:', error);
+                document.getElementById('overview-metrics').innerHTML = '<div class="alert alert-danger">Error loading overview data</div>';
+            }
+        }
+
+        // Load sentiment data and create charts
+        async function loadSentimentData() {
+            try {
+                const [overviewResponse, trendsResponse] = await Promise.all([
+                    axios.get(`${API_BASE}/overview`),
+                    axios.get(`${API_BASE}/sentiment-trends`)
+                ]);
+                
+                const overviewData = overviewResponse.data;
+                const trendsData = trendsResponse.data;
+                
+                // Sentiment pie chart
+                const sentimentCtx = document.getElementById('sentimentChart').getContext('2d');
+                new Chart(sentimentCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Positive', 'Negative', 'Neutral'],
+                        datasets: [{
+                            data: [
+                                overviewData.sentiment_breakdown.positive || 0,
+                                overviewData.sentiment_breakdown.negative || 0,
+                                overviewData.sentiment_breakdown.neutral || 0
+                            ],
+                            backgroundColor: ['#28a745', '#dc3545', '#6c757d'],
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        onClick: function(event, elements) {
+                            if (elements.length > 0) {
+                                const element = elements[0];
+                                const index = element.index;
+                                const sentiments = ['positive', 'negative', 'neutral'];
+                                const sentiment = sentiments[index];
+                                
+                                // Filter posts by the clicked sentiment
+                                document.getElementById('sentimentFilter').value = sentiment;
+                                loadRecentPosts();
+                                
+                                // Scroll to the posts section
+                                document.getElementById('posts-section').scrollIntoView({ behavior: 'smooth' });
+                            }
+                        }
+                    }
+                });
+                
+                // Sentiment trend line chart
+                const trendCtx = document.getElementById('sentimentTrendChart').getContext('2d');
+                new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: trendsData.trends.map(t => new Date(t.date).toLocaleDateString()),
+                        datasets: [{
+                            label: 'Average Sentiment',
+                            data: trendsData.trends.map(t => t.avg_sentiment),
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                min: -1,
+                                max: 1
+                            }
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error loading sentiment data:', error);
+            }
+        }
+
+        // Load themes data
+        async function loadThemesData() {
+            try {
+                const response = await axios.get(`${API_BASE}/themes`);
+                const data = response.data;
+                
+                const ctx = document.getElementById('themesChart').getContext('2d');
+                const themesChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.top_themes.map(t => t.name),
+                        datasets: [{
+                            label: 'Positive',
+                            data: data.top_themes.map(t => t.positive_count),
+                            backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                            borderColor: 'rgb(34, 197, 94)',
+                            borderWidth: 1
+                        }, {
+                            label: 'Neutral',
+                            data: data.top_themes.map(t => t.neutral_count),
+                            backgroundColor: 'rgba(156, 163, 175, 0.8)',
+                            borderColor: 'rgb(156, 163, 175)',
+                            borderWidth: 1
+                        }, {
+                            label: 'Negative',
+                            data: data.top_themes.map(t => t.negative_count),
+                            backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                            borderColor: 'rgb(239, 68, 68)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: false
+                            },
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(context) {
+                                        return context[0].label;
+                                    },
+                                    afterBody: function(context) {
+                                        const themeIndex = context[0].dataIndex;
+                                        const theme = data.top_themes[themeIndex];
+                                        return [
+                                            '',
+                                            `Total mentions: ${theme.total_mentions}`,
+                                            '',
+                                            theme.description,
+                                            '',
+                                            'Click to view posts with this sentiment'
+                                        ];
+                                    }
+                                }
+                            }
+                        },
+                        onClick: function(event, elements) {
+                            if (elements.length > 0) {
+                                const element = elements[0];
+                                const datasetIndex = element.datasetIndex;
+                                const index = element.index;
+                                
+                                const theme = data.top_themes[index];
+                                const sentiments = ['positive', 'neutral', 'negative'];
+                                const sentiment = sentiments[datasetIndex];
+                                
+                                // Load posts for this theme and sentiment
+                                loadThemePosts(theme.name, sentiment);
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading themes data:', error);
+            }
+        }
+
+        // Load competitors
+        async function loadCompetitors() {
+            try {
+                const response = await axios.get(`${API_BASE}/competitors`);
+                const competitors = response.data.competitors;
+                
+                let html = '';
+                if (competitors.length === 0) {
+                    html = '<p class="text-muted">No competitor mentions found</p>';
+                } else {
+                    competitors.forEach(comp => {
+                        const sentimentClass = comp.avg_sentiment > 0 ? 'sentiment-positive' : 
+                                            comp.avg_sentiment < 0 ? 'sentiment-negative' : 'sentiment-neutral';
+                        html += `
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>${comp.name}</span>
+                                <span>
+                                    <span class="badge bg-secondary">${comp.mention_count}</span>
+                                    <span class="${sentimentClass} ms-2">${comp.avg_sentiment.toFixed(2)}</span>
+                                </span>
+                            </div>
+                        `;
+                    });
+                }
+                
+                document.getElementById('competitors-list').innerHTML = html;
+            } catch (error) {
+                console.error('Error loading competitors:', error);
+                document.getElementById('competitors-list').innerHTML = '<div class="alert alert-danger">Error loading competitors</div>';
+            }
+        }
+
+        // Load recent posts
+        async function loadRecentPosts() {
+            try {
+                const platform = document.getElementById('platformFilter').value;
+                const sentiment = document.getElementById('sentimentFilter').value;
+                
+                let url = `${API_BASE}/posts?per_page=10`;
+                if (platform) url += `&platform=${platform}`;
+                if (sentiment) url += `&sentiment=${sentiment}`;
+                
+                const response = await axios.get(url);
+                const posts = response.data.posts;
+                
+                let html = '';
+                if (posts.length === 0) {
+                    html = '<p class="text-muted">No posts found</p>';
+                } else {
+                    posts.forEach(post => {
+                        const sentimentClass = post.sentiment_label === 'positive' ? 'sentiment-positive' : 
+                                            post.sentiment_label === 'negative' ? 'sentiment-negative' : 'sentiment-neutral';
+                        
+                        const themesHtml = post.themes.map(theme => `<span class="theme-badge">${theme}</span>`).join('');
+                        
+                        html += `
+                            <div class="post-item">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="mb-1">${post.title || 'No title'}</h6>
+                                    <small class="text-muted">${post.platform}</small>
+                                </div>
+                                <p class="mb-2">${post.content}</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        ${themesHtml}
+                                    </div>
+                                    <div>
+                                        <span class="${sentimentClass} fw-bold">${post.sentiment_label}</span>
+                                        <small class="text-muted ms-2">${post.sentiment_score.toFixed(2)}</small>
+                                    </div>
+                                </div>
+                                <small class="text-muted">
+                                    ${post.author} • ${new Date(post.created_at).toLocaleDateString()}
+                                    ${post.url ? `• <a href="${post.url}" target="_blank">View</a>` : ''}
+                                </small>
+                            </div>
+                        `;
+                    });
+                }
+                
+                document.getElementById('posts-container').innerHTML = html;
+            } catch (error) {
+                console.error('Error loading posts:', error);
+                document.getElementById('posts-container').innerHTML = '<div class="alert alert-danger">Error loading posts</div>';
+            }
+        }
+
+        // Data Management Functions
+        async function checkRedditData() {
+            try {
+                const response = await axios.get(`${API_BASE}/posts?platform=reddit&per_page=1`);
+                const totalRedditPosts = response.data.pagination ? response.data.pagination.total : 0;
+                
+                alert(`Total Reddit posts in database: ${totalRedditPosts}`);
+                return totalRedditPosts;
+            } catch (error) {
+                console.error('Error checking Reddit data:', error);
+                alert('Error checking Reddit data');
+                return 0;
+            }
+        }
+
+        // YouTube functionality has been removed - focusing on Reddit only
+
+
+    </script>
+</body>
+</html> 
